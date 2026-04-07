@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package invoice;
+
+// gRPC Service zur Speicherung von Rechnungs-Metadaten
+service InvoiceService {
+  rpc SaveMetadata(InvoiceRequest) returns (InvoiceResponse);
+}
+
+// Die Metadaten einer Rechnung
+message InvoiceRequest {
+  string invoice_id = 1;
+  string customer_name = 2;
+  double total_amount = 3;
+  string issue_date = 4;
+}
+
+// Die Antwort des Servers (Erfolgsmeldung)
+message InvoiceResponse {
+  bool success = 1;
+  string message = 2;
+}
