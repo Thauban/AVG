@@ -42,7 +42,7 @@ class InvoiceRouter(invoice_pb2_grpc.InvoiceServiceServicer):
             )
 
     def GetInvoice(self, request, context):
-        """..."""
+        """Entgegennahme eines gRPC-Requests zum Abrufen einer Rechnung anhand der ID."""
         logger.info(f"[Router] Empfange gRPC-Request zum Abrufen der Rechnung mit ID: {request.invoice_id}")
 
         invoice_data, message = self.logic.get_invoice_by_id(request.invoice_id)
@@ -63,7 +63,7 @@ class InvoiceRouter(invoice_pb2_grpc.InvoiceServiceServicer):
             )
 
     def ListInvoices(self, request, context):
-        """..."""
+        """Entgegennahme eines gRPC-Requests zum Abrufen aller Rechnungen."""
         logger.info("[Router] Empfange gRPC-Request zum Abrufen aller Rechnungen")
 
         invoices, message = self.logic.get_all_invoices()
@@ -86,7 +86,7 @@ class InvoiceRouter(invoice_pb2_grpc.InvoiceServiceServicer):
         )
     
     def DeleteInvoice(self, request, context):
-        """..."""
+        """Entgegennahme eines gRPC-Requests zum Löschen einer Rechnung anhand der ID."""
         logger.info(f"[Router] Empfange gRPC-Request zum Löschen der Rechnung mit ID: {request.invoice_id}")
 
         success, message = self.logic.delete_invoice(request.invoice_id)
