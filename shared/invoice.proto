@@ -5,6 +5,9 @@ package invoice;
 // gRPC Service zur Speicherung von Rechnungs-Metadaten
 service InvoiceService {
   rpc SaveMetadata(InvoiceRequest) returns (InvoiceResponse);
+  rpc GetInvoice (InvoiceLookupRequest) returns (GetInvoiceResponse);
+  rpc ListInvoices (EmptyLookup) returns (ListInvoicesResponse);
+  rpc DeleteInvoice (InvoiceLookupRequest) returns (InvoiceResponse);
 }
 
 // Die Metadaten einer Rechnung
@@ -19,4 +22,32 @@ message InvoiceRequest {
 message InvoiceResponse {
   bool success = 1;
   string message = 2;
+}
+
+message InvoiceLookupRequest {
+    string invoice_id = 1;
+}
+
+message GetInvoiceResponse {
+  bool success = 1;
+  string message = 2;
+  string invoice_id = 3;
+  string customer_name = 4;
+  double total_amount = 5;
+  string issue_date = 6;
+}
+
+message EmptyLookup {}
+
+message InvoiceData {
+  string invoice_id = 1;
+  string customer_name = 2;
+  double total_amount = 3;
+  string issue_date = 4;
+}
+
+message ListInvoicesResponse {
+  bool success = 1;
+  string message = 2;
+  repeated InvoiceData invoices = 3;
 }
