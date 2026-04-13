@@ -60,8 +60,14 @@ def main():
         logger.info(f'[*] Zahlungssystem gestartet. Warte in der Schlange "{RABBITMQ_QUEUE}"...')
         channel.start_consuming()
 
+    except pika.exceptions.ProbableAuthenticationError:
+        logger.error(f"[Worker] Login fehlgeschlagen! User '{RABBITMQ_USER}' ist ungültig oder Passwort falsch.")
+        sys.exit(1)
     except pika.exceptions.AMQPConnectionError:
-        logger.error("[Worker] RabbitMQ nicht erreichbar! Läuft der Docker-Container?")
+        logger.error(f"[Worker] RabbitMQ unter {RABBITMQ_HOST}:{RABBITMQ_PORT} nicht erreichbar! Läuft der Docker-Container?")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"[Worker] Unerwarteter Fehler: {e}")
         sys.exit(1)
 
 if __name__ == '__main__':

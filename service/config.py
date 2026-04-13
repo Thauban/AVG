@@ -1,17 +1,29 @@
 "Zentrale Konfiguration für das Zahlungssystem"
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Ermittle das Verzeichnis des Projekts (eine Ebene über dem Service-Ordner)
+BASE_DIR = Path(__file__).resolve().parent.parent
+DOTENV_PATH = BASE_DIR / ".env"
+
+# Lade Umgebungsvariablen aus .env Datei
+if DOTENV_PATH.exists():
+    load_dotenv(DOTENV_PATH)
+else:
+    # Fallback, falls .env woanders liegt oder bereits geladen wurde
+    load_dotenv()
 
 # RabbitMQ-Verbindungseinstellungen
-# Wir nutzen Umgebungsvariablen, damit es in Docker und Lokal funktioniert.
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
 RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", 5672))
 
-# Standard-Zugangsdaten (admin/avg123)
+# Zugangsdaten (kommen nun zuverlässig aus .env)
 RABBITMQ_USER = os.getenv("RABBITMQ_USER", "admin")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "avg123")
 
 # Name der Warteschlange
-RABBITMQ_QUEUE = "payment_queue"
+RABBITMQ_QUEUE = os.getenv("RABBITMQ_QUEUE", "payment_queue")
 
-# Logging-Level (INFO, DEBUG, ERROR)
+# Logging-Level
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
