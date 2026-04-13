@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    build: 
+      context: ../service/RabbitMQ
+    container_name: avg-mq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: always
