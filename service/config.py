@@ -18,9 +18,9 @@ else:
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
 RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", 5672))
 
-# Zugangsdaten (kommen nun zuverlässig aus .env)
-RABBITMQ_USER = os.getenv("RABBITMQ_USER", "admin")
-RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "avg123")
+# Zugangsdaten (kommen nun ausschließlich aus .env oder Umgebungsvariablen)
+RABBITMQ_USER = os.getenv("RABBITMQ_USER")
+RABBITMQ_PASS = os.getenv("RABBITMQ_PASS")
 
 # Name der Warteschlange
 RABBITMQ_QUEUE = os.getenv("RABBITMQ_QUEUE", "payment_queue")
