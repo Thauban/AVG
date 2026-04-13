@@ -1,33 +1,73 @@
-# Systemarchitektur: Rechnungs- und Zahlungssystem
+# Projekt Doku - AVG Zahlungssystem
 
-Dieses Dokument beschreibt die Architektur und Funktionsweise des Systems, das für die Verarbeitung von Rechnungen und Zahlungsaufträgen entwickelt wurde.
+Moin, hier ist die Übersicht, wie unser Code zusammenhängt.
+Der Code ist leicht verständlich, aber mit dieser Dokumentation versteht es .
 
-## Komponenten
+## Was haben wir?
 
-Das System besteht gemäß den Anforderungen aus folgenden separat lauffähigen Komponenten:
+### 1. Der gRPC Server (`/server`)
 
-### 1. gRPC Service (Rechnungs-Storage)
-**Verzeichnis:** `server/`
-- Nimmt über gRPC Strukturdaten (Metadaten) von Rechnungen entgegen.
-- Definiert wird die Schnittstelle in `shared/invoice.proto`, die Methoden wie `SaveMetadata` bereitstellt.
-- Dem Code-Prinzip "schlicht und einfach" folgend, werden die Rechnungsdaten hier temporär in einer Liste im Arbeitsspeicher (`INVOICE_DB`) abgelegt.
-- Nach erfolgreichem Speichern wird dem Client der Erfolg bestätigt.
+Das ist das Herzstück. Hier werden die Rechnungsdaten (Metadaten) gespeichert.
 
-### 2. Zahlungssystem (Message Broker Consumer)
-**Verzeichnis:** `payment_worker/`
-- Ein eigenständiger Worker-Prozess, der unabhängig vom gRPC-Server läuft.
-- Er verbindet sich mit einem **RabbitMQ** Message Broker.
-- Er lauscht auf der Warteschlange (Queue) `payment_queue`.
-- Eingehende Zahlungsaufträge werden asynchron entgegengenommen, zur Simulation verarbeitet (`time.sleep(2)`) und danach im Broker als erledigt markiert (Acknowledge).
+- Benutzt gRPC (schneller als REST).
+- Hat ne einfache In-Memory "Datenbank" (reicht für's Erste) -> später Erweiterbar mit richtiger Datenbank im Repository.
+- Läuft standardmäßig auf Port `50051`.
 
-### 3. Client (Orchestrator)
-**Verzeichnis:** `client/`
-- Dient als Ausgangspunkt für die Datenverarbeitung.
-- Der Client erzeugt fiktive Rechnungsdaten und speichert diese **synchron** beim gRPC-Server ab.
-- Unmittelbar danach erzeugt der Client einen asynchronen Zahlungsauftrag (JSON) und schickt diesen über **RabbitMQ** in die `payment_queue`. An diesem Punkt ist die Arbeit des Clients beendet – das Zahlungssystem bearbeitet den Auftrag im Hintergrund weiter.
+Zudem sind Methoden hinzugefügt, um bereits gespeicherte Daten auch abzurufen.
+Das ganze ist nach der Multiple-Layer-Architecture aufgebaut. (router-logic-repository)
 
-## Kommunikation
+### 2. Der RabbitMQ Container (`/compose`)
 
-In diesem Projekt werden bewusst zwei unterschiedliche Kommunikations-Paradigmen kombiniert:
-- **Synchron (gRPC):** Speicherung der Rechnung. Der Client wartet, bis der Server die Speicherung bestätigt.
-- **Asynchron (RabbitMQ):** Veranlassung der Zahlung. Der Client feuert die Nachricht lediglich ab ("Fire and Forget"). Der Zahlungsworker kann den Job auch sehr viel später abarbeiten, falls das Backend ausgelastet sein sollte. Dies entspricht gängigen industriellen Best-Practices.
+Hier senden wir alle Zahlungsaufträge hin.
+
+- Läuft in Docker (mit dem Management UI auf `15672`).
+- Zugangsdaten kommen aus der `.env`.
+- Nutzung der `payment_queue`.
+
+### 3. Der Payment Worker (`/service`)
+
+Das ist das Modul, welches die Transaktionen, welche in Auftrag gegeben wurden, auch ausführt.
+
+- lauscht an RabbitMQ und wartet auf neue Nachrichten.
+- Wenn was kommt, simuliert er die Zahlung (mit `time.sleep`, als ob er echt was tun würde).
+- Holt sich seine Config (User/Passwort für MQ) direkt aus der `.env`.
+
+### 4. Der Client (`/client`)
+
+Damit kann man das Ganze testen. Schickt Rechnungen an den Server oder haut Zahlungsaufträge in die Queue.
+Kann aber auch die bereits geschickten Rechnungen abrufen.
+
+### 5. Docs
+
+Das Sequenzdiagramm wurde mit unterstützung von Google Anti-gravity erstellt.
+Das Diagramm hilft dabei, den Systemablauf zwischen Client, gRPC-Server, RabbitMQ und dem Payment Worker besser zu verstehen.
+
+---
+
+## Wie kriegt man das zum Laufen? [alles in separaten Tabs]
+
+1. **Docker starten:**
+   Pfadwechsel in `/compose` und führe `docker compose up -d` aus. Dann läuft RabbitMQ.
+2. **Server starten:**
+   `python server/server.py` (vorher `pip install -r requirements.txt` machen!).
+   (kann auch über Dockerfile gemacht werden)
+3. **Worker starten:**
+   `python service/payment_system.py`. Der sollte ausgeben, dass er auf Nachrichten wartet.
+4. **Testen:**
+   unter `/client` die client.py ausführen.
+
+## Wichtig: .env Datei
+
+Ohne die `.env` im Hauptverzeichnis geht gar nichts. Da müssen `RABBITMQ_USER` und `RABBITMQ_PASS` drinstehen, sonst kann der Worker sich nicht einloggen.
+
+**Dateien, die automatisch generiert werden:**
+Die `*_pb2.py` BITTE NICHT ANFASSEN!
+Sie werden aus der `.proto` Datei in `/shared` generiert.
+Wenn die API geändert wird, muss den Befehl für den gRPC-Compiler nochmal ausgeführt werden.
+
+Viel Erfolg beim Ausprobieren!
+
+### Anmerkung zu KI
+
+Teile des Codes wurden unter Hilfe von KI-Modellen, wie Gemini, Codex oder Claude, erstellt.
+Diese wurden für unseren Code angepasst und es wurde nur Code verwendet, von dem wir wissen, was und wie er funktioniert.
