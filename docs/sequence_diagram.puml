@@ -1,0 +1,66 @@
+@startuml
+header AVG Rechnungs- und Zahlungssystem
+title Sequenzdiagramm – Übersicht
+
+autonumber
+skinparam responseMessageBelowArrow true
+
+actor "Client" as Client
+
+box "gRPC Server" #LightBlue
+    participant "Router" as Router
+    participant "Logik" as Logic
+    database "Repository\n(In-Memory)" as Repo
+end box
+
+box "Messaging" #LightGreen
+    queue "RabbitMQ" as MQ
+    participant "Payment\nWorker" as Worker
+end box
+
+== Rechnung speichern ==
+
+Client -> Router : SaveMetadata(InvoiceRequest)
+Router -> Logic : validate_and_create()
+Logic -> Repo : add_object()
+Repo --> Logic : invoice_id
+Logic --> Router : Ergebnis
+Router --> Client : InvoiceResponse
+
+== Rechnung abrufen ==
+
+Client -> Router : GetInvoice(InvoiceLookupRequest)
+Router -> Logic : get_invoice_by_id()
+Logic -> Repo : get_object()
+Repo --> Logic : invoice_dict
+Logic --> Router : Ergebnis
+Router --> Client : GetInvoiceResponse
+
+== Alle Rechnungen auflisten ==
+
+Client -> Router : ListInvoices(EmptyLookup)
+Router -> Logic : get_all_invoices()
+Logic -> Repo : list_objects()
+Repo --> Logic : Liste
+Logic --> Router : Ergebnis
+Router --> Client : ListInvoicesResponse
+
+== Rechnung löschen ==
+
+Client -> Router : DeleteInvoice(InvoiceLookupRequest)
+Router -> Logic : delete_invoice()
+Logic -> Repo : delete_object()
+Repo --> Logic : True / False
+Logic --> Router : Ergebnis
+Router --> Client : InvoiceResponse
+
+== Zahlung abwickeln (asynchron) ==
+
+Client -> MQ : publish(invoice_id, amount, currency)
+MQ --> Client : bestätigt
+...
+MQ -> Worker : consume(Nachricht)
+Worker -> Worker : Zahlung verarbeiten
+Worker -> MQ : acknowledge
+
+@enduml
