@@ -10,6 +10,8 @@ Der Client fuehrt einen kompletten Beispielablauf aus:
 
 Damit dient die Datei als Test- und Demonstrationsclient fuer die
 Kommunikation mit dem gRPC-Server und dem RabbitMQ-Broker.
+
+Hinweis: Umlaute wurden im Code bewusst als ae/oe/ue geschrieben
 """
 
 import json
@@ -69,7 +71,7 @@ def save_invoice(stub, invoice_data):
     geliefert hat.
     """
 
-    logger.info("Sende Rechnungsdaten fuer ID '{}' an den gRPC-Server...", invoice_data.invoice_id)
+    logger.info("Sende Rechnungsdaten für ID '{}' an den gRPC-Server...", invoice_data.invoice_id)
     response = stub.SaveMetadata(invoice_data)
     logger.success("Rechnung '{}' erfolgreich gespeichert.", invoice_data.invoice_id)
     logger.info("Server-Antwort: {}", response.message)
@@ -108,15 +110,15 @@ def delete_invoice(stub, invoice_id):
     Fehlerfall protokolliert.
     """
 
-    logger.warning("Loesche Rechnung mit ID '{}'...", invoice_id)
+    logger.warning("Lösche Rechnung mit ID '{}'...", invoice_id)
     request = invoice_pb2.InvoiceLookupRequest(invoice_id=invoice_id)
     response = stub.DeleteInvoice(request)
 
     if response.success:
-        logger.success("Rechnung '{}' erfolgreich geloescht.", invoice_id)
+        logger.success("Rechnung '{}' erfolgreich gelöscht.", invoice_id)
         logger.info("Server-Antwort: {}", response.message)
 
-        logger.info("Pruefe, ob die geloeschte Rechnung nicht mehr abrufbar ist...")
+        logger.info("Prüfe, ob die gelöschte Rechnung nicht mehr abrufbar ist...")
         check_response = stub.GetInvoice(request)
 
         if not check_response.success:
@@ -124,7 +126,7 @@ def delete_invoice(stub, invoice_id):
         else:
             logger.warning("Verifikation fehlgeschlagen: Rechnung ist noch vorhanden.")
     else:
-        logger.error("Loeschen fehlgeschlagen: {}", response.message)
+        logger.error("Löschen fehlgeschlagen: {}", response.message)
 
 
 def list_invoices(stub):
@@ -168,7 +170,7 @@ def publish_payment(invoice_data):
     """
 
     logger.info(
-        "Sende Zahlungsauftrag fuer Rechnung '{}' an RabbitMQ...",
+        "Sende Zahlungsauftrag für Rechnung '{}' an RabbitMQ...",
         invoice_data.invoice_id,
     )
 
@@ -215,7 +217,7 @@ def run():
     Rechnungen an RabbitMQ.
     """
 
-    logger.info("Starte Client-Testlauf fuer das Rechnungs- und Zahlungssystem.")
+    logger.info("Starte Client-Testlauf für das Rechnungs- und Zahlungssystem.")
 
     try:
         with grpc.insecure_channel(GRPC_SERVER) as channel:
@@ -258,7 +260,7 @@ def run():
         for invoice_data in remaining_invoices:
             publish_payment(invoice_data)
     except pika.exceptions.AMQPConnectionError:
-        logger.error("RabbitMQ Fehler: Verbindung fehlgeschlagen. Laeuft der RabbitMQ-Server?")
+        logger.error("RabbitMQ Fehler: Verbindung fehlgeschlagen. Läuft der RabbitMQ-Server?")
         return
 
     logger.success("Client-Testlauf abgeschlossen.")
