@@ -34,8 +34,10 @@ Das ist das Modul, welches die Transaktionen, welche in Auftrag gegeben wurden, 
 
 ### 4. Der Client (`/client`)
 
-Damit kann man das Ganze testen. Schickt Rechnungen an den Server oder haut Zahlungsaufträge in die Queue.
-Kann aber auch die bereits geschickten Rechnungen abrufen.
+Der Client simuliert einen kompletten Ablauf: Rechnungen werden per gRPC
+gespeichert und abgefragt, eine Rechnung wird gelöscht, danach wird die
+Rechnungsliste erneut angezeigt. Für die verbleibenden Rechnungen werden
+Zahlungsaufträge an RabbitMQ gesendet.
 
 ### 5. Docs
 
