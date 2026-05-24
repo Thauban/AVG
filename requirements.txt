@@ -3,3 +3,4 @@ grpcio-tools
 pika
 loguru
 python-dotenv
+pyzeebe
