@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20191111/DC/"
+             id="compliance-definitions"
+             name="Compliance Entscheidungen"
+             namespace="http://camunda.org/schema/1.0/dmn">
+
+  <decision id="check-compliance-need" name="Compliance-Bedarf prüfen">
+    <decisionTable id="decisionTable_1" hitPolicy="FIRST">
+
+      <input id="input_amount" label="Betrag">
+        <inputExpression id="inputExpr_amount" typeRef="double">
+          <text>totalAmount</text>
+        </inputExpression>
+      </input>
+
+      <input id="input_currency" label="Währung">
+        <inputExpression id="inputExpr_currency" typeRef="string">
+          <text>currency</text>
+        </inputExpression>
+      </input>
+
+      <output id="output_compliance"
+              label="Compliance erforderlich?"
+              name="complianceRequired"
+              typeRef="boolean" />
+
+      <rule id="rule_eur">
+        <description>EUR über 10.000 → Compliance nötig</description>
+        <inputEntry id="inputEntry_eur_amount"><text>&gt; 10000</text></inputEntry>
+        <inputEntry id="inputEntry_eur_currency"><text>"EUR"</text></inputEntry>
+        <outputEntry id="outputEntry_eur"><text>true</text></outputEntry>
+      </rule>
+
+      <rule id="rule_chf">
+        <description>CHF über 10.800 (≈ 10.000 EUR) → Compliance nötig</description>
+        <inputEntry id="inputEntry_chf_amount"><text>&gt; 10800</text></inputEntry>
+        <inputEntry id="inputEntry_chf_currency"><text>"CHF"</text></inputEntry>
+        <outputEntry id="outputEntry_chf"><text>true</text></outputEntry>
+      </rule>
+
+      <rule id="rule_gbp">
+        <description>GBP über 8.700 (≈ 10.000 EUR) → Compliance nötig</description>
+        <inputEntry id="inputEntry_gbp_amount"><text>&gt; 8700</text></inputEntry>
+        <inputEntry id="inputEntry_gbp_currency"><text>"GBP"</text></inputEntry>
+        <outputEntry id="outputEntry_gbp"><text>true</text></outputEntry>
+      </rule>
+
+      <rule id="rule_usd">
+        <description>USD über 11.000 (≈ 10.000 EUR) → Compliance nötig</description>
+        <inputEntry id="inputEntry_usd_amount"><text>&gt; 11000</text></inputEntry>
+        <inputEntry id="inputEntry_usd_currency"><text>"USD"</text></inputEntry>
+        <outputEntry id="outputEntry_usd"><text>true</text></outputEntry>
+      </rule>
+
+      <rule id="rule_default">
+        <description>Standardfall → kein Compliance-Check nötig</description>
+        <inputEntry id="inputEntry_default_amount"><text></text></inputEntry>
+        <inputEntry id="inputEntry_default_currency"><text></text></inputEntry>
+        <outputEntry id="outputEntry_default"><text>false</text></outputEntry>
+      </rule>
+
+    </decisionTable>
+  </decision>
+
+</definitions>
