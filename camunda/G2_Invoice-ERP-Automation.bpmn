@@ -1,0 +1,536 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_Soll_P2P_Sprint3_Improved" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Web Modeler" exporterVersion="dc1bfde" modeler:executionPlatform="Camunda Cloud" modeler:executionPlatformVersion="8.8.0">
+  <bpmn:message id="Message_InvoiceReceived" name="92f1e678-fc4d-4f0d-b59e-ff8ae1d81e80" />
+  <bpmn:message id="Message_CorrectionReceived" name="Correction received">
+    <bpmn:extensionElements>
+      <zeebe:subscription correlationKey="=invoiceId" />
+    </bpmn:extensionElements>
+  </bpmn:message>
+  <bpmn:collaboration id="Collaboration_Soll_P2P_Sprint3_Improved" name="Soll">
+    <bpmn:participant id="Participant_P2P_Process" name="Sollprozess" processRef="Process_Soll_P2P_Sprint3_Improved" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Soll_P2P_Sprint3_Improved" name="Digitalisierter P2P-Sollprozess mit Camunda - Sprint 3 verbessert" isExecutable="true">
+    <bpmn:laneSet id="LaneSet_Soll_P2P_Sprint3_Improved">
+      <bpmn:lane id="Lane_Sachbearbeitung" name="Sachbearbeitung">
+        <bpmn:flowNodeRef>Task_ManualReview</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ImportEDIInvoice</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_InputChannel</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ComplianceRequired</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_CheckComplianceNeed</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_PrepareComplianceDecision</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_RegisterOrUpdateInvoice_gRPC</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ExtractData_Manual</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_UpdateInvoiceData</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ReceiveCorrection</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_RequestMissingInformation</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ManualDecision</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>StartEvent_InvoiceReceived</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_0kbkuyz</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Finanzabteilung" name="Finanzabteilung">
+        <bpmn:flowNodeRef>EndEvent_Rejected</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_Completed</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ArchiveInvoice</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ExecutePayment</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ErpSync</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ApproveInvoice</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_1e73wtr" name="Management/ Compliance">
+        <bpmn:flowNodeRef>Task_ManualComplianceCheck</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ComplianceResult</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:userTask id="Task_ManualReview" name="Rechnung fachlich prüfen">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="sachbearbeitung" />
+        <zeebe:userTask />
+        <zeebe:formDefinition formId="rechnung-fachlich-pruefen" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ComplianceRequired_No</bpmn:incoming>
+      <bpmn:incoming>Flow_ComplianceResult_Ok</bpmn:incoming>
+      <bpmn:outgoing>Flow_ManualReview_Decision</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_ImportEDIInvoice" name="EDI-Rechnung übernehmen">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="import-edi-invoice" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_InputChannel_EDI</bpmn:incoming>
+      <bpmn:outgoing>Flow_EDI_Register</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_InputChannel" name="Eingangskanal?">
+      <bpmn:incoming>Flow_Start_InputChannel</bpmn:incoming>
+      <bpmn:incoming>Flow_0zlsez0</bpmn:incoming>
+      <bpmn:outgoing>Flow_InputChannel_EDI</bpmn:outgoing>
+      <bpmn:outgoing>Flow_InputChannel_MailPortal</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="EndEvent_Rejected" name="Rechnung abgelehnt">
+      <bpmn:incoming>Flow_ManualDecision_Reject</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="EndEvent_Completed" name="Rechnung abgeschlossen">
+      <bpmn:incoming>Flow_Archive_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="Task_ArchiveInvoice" name="Log-Eintrag und Archivierung">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="archive-invoice" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Payment_Archive</bpmn:incoming>
+      <bpmn:outgoing>Flow_Archive_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_ExecutePayment" name="Zahlung vorbereiten und ausführen">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="payment-execution" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ErpSync_Payment</bpmn:incoming>
+      <bpmn:outgoing>Flow_Payment_Archive</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Task_ErpSync" name="ERP-Buchung durchführen">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="finanzabteilung" />
+        <zeebe:formDefinition formId="erp-buchung-manuell" />
+        <zeebe:userTask />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Approve_ErpSync</bpmn:incoming>
+      <bpmn:outgoing>Flow_ErpSync_Payment</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_ApproveInvoice" name="Rechnung final freigeben">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="finanzabteilung" />
+        <zeebe:userTask />
+        <zeebe:formDefinition formId="rechnung-final-freigeben" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ManualDecision_Approve</bpmn:incoming>
+      <bpmn:outgoing>Flow_Approve_ErpSync</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_ComplianceRequired" name="Compliance-Check erforderlich?">
+      <bpmn:incoming>Flow_ComplianceNeed_Gateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_ComplianceRequired_Yes</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ComplianceRequired_No</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:businessRuleTask id="Task_CheckComplianceNeed" name="Compliance-Bedarf prüfen (DMN)">
+      <bpmn:extensionElements>
+        <zeebe:calledDecision decisionId="check-compliance-need" resultVariable="complianceRequired" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_PrepareCompliance_DMN</bpmn:incoming>
+      <bpmn:incoming>Flow_Update_Register</bpmn:incoming>
+      <bpmn:outgoing>Flow_ComplianceNeed_Gateway</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:userTask id="Task_PrepareComplianceDecision" name="Rechnungsdaten (Beträge/IBAN) manuell erfassen">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="sachbearbeitung" />
+        <zeebe:formDefinition formId="rechnung-vorpruefen" />
+        <zeebe:userTask />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Register_PrepareCompliance</bpmn:incoming>
+      <bpmn:outgoing>Flow_PrepareCompliance_DMN</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_RegisterOrUpdateInvoice_gRPC" name="Rechnungseingang im System registrieren (gRPC)">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="register-or-update-invoice-grpc" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_EDI_Register</bpmn:incoming>
+      <bpmn:incoming>Flow_ManualExtract_Register</bpmn:incoming>
+      <bpmn:outgoing>Flow_Register_PrepareCompliance</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Task_ExtractData_Manual" name="Rechnungsdaten manuell erfassen">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="sachbearbeitung" />
+        <zeebe:userTask />
+        <zeebe:formDefinition formId="erfassung-der-rechnungsdaten" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_InputChannel_MailPortal</bpmn:incoming>
+      <bpmn:outgoing>Flow_ManualExtract_Register</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_ManualComplianceCheck" name="Compliance-Check manuell durchführen">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="finanzabteilung" />
+        <zeebe:formDefinition formId="compliance-check-manuell" />
+        <zeebe:userTask />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ComplianceRequired_Yes</bpmn:incoming>
+      <bpmn:outgoing>Flow_ComplianceCheck_Result</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_ComplianceResult" name="Compliance ok?">
+      <bpmn:incoming>Flow_ComplianceCheck_Result</bpmn:incoming>
+      <bpmn:outgoing>Flow_ComplianceResult_Ok</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ComplianceResult_Issue</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_UpdateInvoiceData" name="Rechnungsdaten manuell aktualisieren">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="sachbearbeitung" />
+        <zeebe:userTask />
+        <zeebe:formDefinition formId="rechnungsdaten-aktualisieren" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ReceiveCorrection_Update</bpmn:incoming>
+      <bpmn:outgoing>Flow_Update_Register</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:receiveTask id="Task_ReceiveCorrection" name="Korrektur / fehlende Infos erhalten" messageRef="Message_CorrectionReceived">
+      <bpmn:extensionElements />
+      <bpmn:incoming>Flow_Request_ReceiveCorrection</bpmn:incoming>
+      <bpmn:outgoing>Flow_ReceiveCorrection_Update</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:userTask id="Task_RequestMissingInformation" name="Korrektur / fehlende Infos anfordern">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="sachbearbeitung" />
+        <zeebe:userTask />
+        <zeebe:formDefinition formId="korrektur-anfordern" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ManualDecision_Correction</bpmn:incoming>
+      <bpmn:incoming>Flow_ComplianceResult_Issue</bpmn:incoming>
+      <bpmn:outgoing>Flow_Request_ReceiveCorrection</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_ManualDecision" name="Manuelle Entscheidung">
+      <bpmn:incoming>Flow_ManualReview_Decision</bpmn:incoming>
+      <bpmn:outgoing>Flow_ManualDecision_Approve</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ManualDecision_Correction</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ManualDecision_Reject</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:startEvent id="StartEvent_InvoiceReceived" name="Rechnung digital eingegangen" zeebe:modelerTemplate="io.camunda.connectors.inbound.EmailMessageStart.v1" zeebe:modelerTemplateVersion="2" zeebe:modelerTemplateIcon="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwXzkwXzI0MjApIj4KPHBhdGggZD0iTTguMzM4MzUgOS45NTM2NUwxMC4zODk0IDEyLjAxMDRMOC4zMzI2MiAxNC4wNjcyTDkuMTQ2MTYgMTQuODc1TDEyLjAxMDcgMTIuMDEwNEw5LjE0NjE2IDkuMTQ1ODNMOC4zMzgzNSA5Ljk1MzY1WiIgZmlsbD0iYmxhY2siLz4KPHBhdGggZD0iTTEyLjM0ODggOS45NTM2NUwxNC4zOTk4IDEyLjAxMDRMMTIuMzQzIDE0LjA2NzJMMTMuMTU2NiAxNC44NzVMMTYuMDIxMiAxMi4wMTA0TDEzLjE1NjYgOS4xNDU4M0wxMi4zNDg4IDkuOTUzNjVaIiBmaWxsPSJibGFjayIvPgo8cGF0aCBkPSJNMy45NzIgMTEuNDM3NUgxLjEyNTMzVjIuNzkyMTlMNy42NzM3NiA3LjMyMzk2QzcuNzY5NjcgNy4zOTA0OSA3Ljg4MzYgNy40MjYxNCA4LjAwMDMyIDcuNDI2MTRDOC4xMTcwNSA3LjQyNjE0IDguMjMwOTggNy4zOTA0OSA4LjMyNjg5IDcuMzIzOTZMMTQuODc1MyAyLjc5MjE5VjhIMTYuMDIxMlYyLjI3MDgzQzE2LjAyMTIgMS45NjY5NCAxNS45MDA0IDEuNjc1NDkgMTUuNjg1NiAxLjQ2MDYxQzE1LjQ3MDcgMS4yNDU3MiAxNS4xNzkyIDEuMTI1IDE0Ljg3NTMgMS4xMjVIMS4xMjUzM0MwLjgyMTQzMiAxLjEyNSAwLjUyOTk4NCAxLjI0NTcyIDAuMzE1MDk5IDEuNDYwNjFDMC4xMDAyMTQgMS42NzU0OSAtMC4wMjA1MDc4IDEuOTY2OTQgLTAuMDIwNTA3OCAyLjI3MDgzVjExLjQzNzVDLTAuMDIwNTA3OCAxMS43NDE0IDAuMTAwMjE0IDEyLjAzMjggMC4zMTUwOTkgMTIuMjQ3N0MwLjUyOTk4NCAxMi40NjI2IDAuODIxNDMyIDEyLjU4MzMgMS4xMjUzMyAxMi41ODMzSDMuOTcyVjExLjQzNzVaTTEzLjYxNDkgMi4yNzA4M0w4LjAwMDMyIDYuMTU1MjFMMi4zODU3NCAyLjI3MDgzSDEzLjYxNDlaIiBmaWxsPSIjRkM1RDBEIi8+CjxwYXRoIGQ9Ik00LjI4MjEgOS45NTM2NUw2LjMzMzE0IDEyLjAxMDRMNC4yNzYzNyAxNC4wNjcyTDUuMDg5OTEgMTQuODc1TDcuOTU0NDkgMTIuMDEwNEw1LjA4OTkxIDkuMTQ1ODNMNC4yODIxIDkuOTUzNjVaIiBmaWxsPSJibGFjayIvPgo8L2c+CjxkZWZzPgo8Y2xpcFBhdGggaWQ9ImNsaXAwXzkwXzI0MjAiPgo8cmVjdCB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIGZpbGw9IndoaXRlIi8+CjwvY2xpcFBhdGg+CjwvZGVmcz4KPC9zdmc+Cg==">
+      <bpmn:extensionElements>
+        <zeebe:properties>
+          <zeebe:property name="inbound.type" value="io.camunda:connector-email-inbound:1" />
+          <zeebe:property name="authentication.type" value="simple" />
+          <zeebe:property name="authentication.username" />
+          <zeebe:property name="authentication.password" />
+          <zeebe:property name="data.imapConfig.imapHost" />
+          <zeebe:property name="data.imapConfig.imapPort" value="993" />
+          <zeebe:property name="data.imapConfig.imapCryptographicProtocol" value="TLS" />
+          <zeebe:property name="data.pollingWaitTime" value="PT20S" />
+          <zeebe:property name="data.pollingConfigDiscriminator" value="unseenPollingConfig" />
+          <zeebe:property name="data.pollingConfig.handlingStrategy" value="READ" />
+          <zeebe:property name="consumeUnmatchedEvents" value="true" />
+          <zeebe:property name="correlationRequired" value="notRequired" />
+          <zeebe:property name="deduplicationModeManualFlag" value="false" />
+          <zeebe:property name="deduplicationMode" value="AUTO" />
+          <zeebe:property name="resultVariable" />
+          <zeebe:property name="resultExpression" />
+        </zeebe:properties>
+      </bpmn:extensionElements>
+      <bpmn:outgoing>Flow_Start_InputChannel</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MessageEventDefinition_0tbvwfj" messageRef="Message_1iicfjc" />
+    </bpmn:startEvent>
+    <bpmn:startEvent id="Event_0kbkuyz">
+      <bpmn:extensionElements>
+        <zeebe:properties>
+          <zeebe:property name="inbound.type" value="io.camunda:connector-email-inbound:1" />
+          <zeebe:property name="authentication.type" value="simple" />
+          <zeebe:property name="authentication.username" />
+          <zeebe:property name="authentication.password" />
+          <zeebe:property name="data.imapConfig.imapHost" />
+          <zeebe:property name="data.imapConfig.imapPort" value="993" />
+          <zeebe:property name="data.imapConfig.imapCryptographicProtocol" value="TLS" />
+          <zeebe:property name="data.pollingWaitTime" value="PT20S" />
+          <zeebe:property name="data.pollingConfigDiscriminator" value="unseenPollingConfig" />
+          <zeebe:property name="data.pollingConfig.handlingStrategy" value="READ" />
+          <zeebe:property name="consumeUnmatchedEvents" value="true" />
+          <zeebe:property name="correlationRequired" value="notRequired" />
+          <zeebe:property name="deduplicationModeManualFlag" value="false" />
+          <zeebe:property name="deduplicationMode" value="AUTO" />
+          <zeebe:property name="resultVariable" />
+          <zeebe:property name="resultExpression" />
+        </zeebe:properties>
+      </bpmn:extensionElements>
+      <bpmn:outgoing>Flow_0zlsez0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ComplianceResult_Ok" name="Ok" sourceRef="Gateway_ComplianceResult" targetRef="Task_ManualReview">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= complianceOk = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ComplianceRequired_No" name="Nein" sourceRef="Gateway_ComplianceRequired" targetRef="Task_ManualReview">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= complianceRequired = false</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ManualReview_Decision" sourceRef="Task_ManualReview" targetRef="Gateway_ManualDecision" />
+    <bpmn:sequenceFlow id="Flow_InputChannel_EDI" name="EDI" sourceRef="Gateway_InputChannel" targetRef="Task_ImportEDIInvoice">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= inputChannel = "edi"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_EDI_Register" sourceRef="Task_ImportEDIInvoice" targetRef="Task_RegisterOrUpdateInvoice_gRPC" />
+    <bpmn:sequenceFlow id="Flow_Start_InputChannel" sourceRef="StartEvent_InvoiceReceived" targetRef="Gateway_InputChannel" />
+    <bpmn:sequenceFlow id="Flow_0zlsez0" sourceRef="Event_0kbkuyz" targetRef="Gateway_InputChannel" />
+    <bpmn:sequenceFlow id="Flow_InputChannel_MailPortal" name="Portal / Mail" sourceRef="Gateway_InputChannel" targetRef="Task_ExtractData_Manual">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= inputChannel != "edi"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ManualDecision_Reject" name="Ablehnen" sourceRef="Gateway_ManualDecision" targetRef="EndEvent_Rejected">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= manualDecision = "reject"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Archive_End" sourceRef="Task_ArchiveInvoice" targetRef="EndEvent_Completed" />
+    <bpmn:sequenceFlow id="Flow_Payment_Archive" sourceRef="Task_ExecutePayment" targetRef="Task_ArchiveInvoice" />
+    <bpmn:sequenceFlow id="Flow_ErpSync_Payment" sourceRef="Task_ErpSync" targetRef="Task_ExecutePayment" />
+    <bpmn:sequenceFlow id="Flow_Approve_ErpSync" sourceRef="Task_ApproveInvoice" targetRef="Task_ErpSync" />
+    <bpmn:sequenceFlow id="Flow_ManualDecision_Approve" name="Freigeben" sourceRef="Gateway_ManualDecision" targetRef="Task_ApproveInvoice">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= manualDecision = "approve"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ComplianceNeed_Gateway" sourceRef="Task_CheckComplianceNeed" targetRef="Gateway_ComplianceRequired" />
+    <bpmn:sequenceFlow id="Flow_ComplianceRequired_Yes" name="Ja" sourceRef="Gateway_ComplianceRequired" targetRef="Task_ManualComplianceCheck">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= complianceRequired = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Update_Register" sourceRef="Task_UpdateInvoiceData" targetRef="Task_CheckComplianceNeed" />
+    <bpmn:sequenceFlow id="Flow_PrepareCompliance_DMN" sourceRef="Task_PrepareComplianceDecision" targetRef="Task_CheckComplianceNeed" />
+    <bpmn:sequenceFlow id="Flow_Register_PrepareCompliance" sourceRef="Task_RegisterOrUpdateInvoice_gRPC" targetRef="Task_PrepareComplianceDecision" />
+    <bpmn:sequenceFlow id="Flow_ManualExtract_Register" sourceRef="Task_ExtractData_Manual" targetRef="Task_RegisterOrUpdateInvoice_gRPC" />
+    <bpmn:sequenceFlow id="Flow_ComplianceCheck_Result" sourceRef="Task_ManualComplianceCheck" targetRef="Gateway_ComplianceResult" />
+    <bpmn:sequenceFlow id="Flow_ComplianceResult_Issue" name="Rückfrage nötig" sourceRef="Gateway_ComplianceResult" targetRef="Task_RequestMissingInformation">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= complianceOk = false</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ReceiveCorrection_Update" sourceRef="Task_ReceiveCorrection" targetRef="Task_UpdateInvoiceData" />
+    <bpmn:sequenceFlow id="Flow_Request_ReceiveCorrection" sourceRef="Task_RequestMissingInformation" targetRef="Task_ReceiveCorrection" />
+    <bpmn:sequenceFlow id="Flow_ManualDecision_Correction" name="Korrektur nötig" sourceRef="Gateway_ManualDecision" targetRef="Task_RequestMissingInformation">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= manualDecision = "correction"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+  </bpmn:process>
+  <bpmn:message id="Message_1iicfjc" name="4f2a7889-8526-4838-b815-16d15d030179" zeebe:modelerTemplate="io.camunda.connectors.inbound.EmailMessageStart.v1" />
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Soll_P2P_Sprint3_Improved">
+    <bpmndi:BPMNPlane id="BPMNPlane_Soll_P2P_Sprint3_Improved" bpmnElement="Collaboration_Soll_P2P_Sprint3_Improved">
+      <bpmndi:BPMNShape id="Shape_Participant_P2P_Process" bpmnElement="Participant_P2P_Process" isHorizontal="true">
+        <dc:Bounds x="155" y="80" width="3000" height="1060" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Sachbearbeitung" bpmnElement="Lane_Sachbearbeitung" isHorizontal="true">
+        <dc:Bounds x="185" y="80" width="2970" height="580" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Finanzabteilung" bpmnElement="Lane_Finanzabteilung" isHorizontal="true">
+        <dc:Bounds x="185" y="660" width="2970" height="360" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_1e73wtr_di" bpmnElement="Lane_1e73wtr" isHorizontal="true">
+        <dc:Bounds x="185" y="1020" width="2970" height="120" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ManualReview" bpmnElement="Task_ManualReview">
+        <dc:Bounds x="1885" y="365" width="170" height="90" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ImportEDIInvoice" bpmnElement="Task_ImportEDIInvoice">
+        <dc:Bounds x="520" y="320" width="170" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_InputChannel" bpmnElement="Gateway_InputChannel" isMarkerVisible="true">
+        <dc:Bounds x="390" y="385" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="450" y="403" width="79" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_Rejected" bpmnElement="EndEvent_Rejected">
+        <dc:Bounds x="2282" y="910" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2275" y="946" width="51" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_Completed" bpmnElement="EndEvent_Completed">
+        <dc:Bounds x="3000" y="782" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2981" y="818" width="74" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ArchiveInvoice" bpmnElement="Task_ArchiveInvoice">
+        <dc:Bounds x="2780" y="760" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ExecutePayment" bpmnElement="Task_ExecutePayment">
+        <dc:Bounds x="2550" y="760" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ErpSync" bpmnElement="Task_ErpSync">
+        <dc:Bounds x="2320" y="760" width="170" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ApproveInvoice" bpmnElement="Task_ApproveInvoice">
+        <dc:Bounds x="2090" y="760" width="170" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_ComplianceRequired" bpmnElement="Gateway_ComplianceRequired" isMarkerVisible="true">
+        <dc:Bounds x="1570" y="385" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1519" y="435" width="62" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_CheckComplianceNeed" bpmnElement="Task_CheckComplianceNeed">
+        <dc:Bounds x="1300" y="365" width="190" height="90" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_PrepareComplianceDecision" bpmnElement="Task_PrepareComplianceDecision">
+        <dc:Bounds x="1060" y="365" width="180" height="90" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_RegisterOrUpdateInvoice_gRPC" bpmnElement="Task_RegisterOrUpdateInvoice_gRPC">
+        <dc:Bounds x="790" y="365" width="200" height="90" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ExtractData_Manual" bpmnElement="Task_ExtractData_Manual">
+        <dc:Bounds x="520" y="440" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ManualComplianceCheck" bpmnElement="Task_ManualComplianceCheck">
+        <dc:Bounds x="1500" y="1040" width="190" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_ComplianceResult" bpmnElement="Gateway_ComplianceResult" isMarkerVisible="true">
+        <dc:Bounds x="1785" y="1055" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1771" y="1115" width="79" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_UpdateInvoiceData" bpmnElement="Task_UpdateInvoiceData">
+        <dc:Bounds x="2605" y="490" width="190" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ReceiveCorrection" bpmnElement="Task_ReceiveCorrection">
+        <dc:Bounds x="2615" y="205" width="170" height="70" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_RequestMissingInformation" bpmnElement="Task_RequestMissingInformation">
+        <dc:Bounds x="2090" y="205" width="190" height="70" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_ManualDecision" bpmnElement="Gateway_ManualDecision" isMarkerVisible="true">
+        <dc:Bounds x="2175" y="385" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2131" y="426" width="67" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1fowofj_di" bpmnElement="StartEvent_InvoiceReceived">
+        <dc:Bounds x="292" y="362" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="230" y="398" width="82" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_05c3pos_di" bpmnElement="Event_0kbkuyz">
+        <dc:Bounds x="292" y="422" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_Flow_ComplianceResult_Ok" bpmnElement="Flow_ComplianceResult_Ok">
+        <di:waypoint x="1810" y="1055" />
+        <di:waypoint x="1810" y="410" />
+        <di:waypoint x="1885" y="410" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1787" y="951" width="15" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ComplianceRequired_No" bpmnElement="Flow_ComplianceRequired_No">
+        <di:waypoint x="1620" y="410" />
+        <di:waypoint x="1885" y="410" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1693" y="393" width="23" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualReview_Decision" bpmnElement="Flow_ManualReview_Decision">
+        <di:waypoint x="2055" y="410" />
+        <di:waypoint x="2175" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_InputChannel_EDI" bpmnElement="Flow_InputChannel_EDI">
+        <di:waypoint x="415" y="385" />
+        <di:waypoint x="415" y="333" />
+        <di:waypoint x="520" y="333" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="460" y="310" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_EDI_Register" bpmnElement="Flow_EDI_Register">
+        <di:waypoint x="690" y="360" />
+        <di:waypoint x="740" y="360" />
+        <di:waypoint x="740" y="410" />
+        <di:waypoint x="790" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Start_InputChannel" bpmnElement="Flow_Start_InputChannel">
+        <di:waypoint x="328" y="380" />
+        <di:waypoint x="359" y="380" />
+        <di:waypoint x="359" y="410" />
+        <di:waypoint x="390" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0zlsez0_di" bpmnElement="Flow_0zlsez0">
+        <di:waypoint x="328" y="440" />
+        <di:waypoint x="359" y="440" />
+        <di:waypoint x="359" y="410" />
+        <di:waypoint x="390" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_InputChannel_MailPortal" bpmnElement="Flow_InputChannel_MailPortal">
+        <di:waypoint x="415" y="435" />
+        <di:waypoint x="415" y="480" />
+        <di:waypoint x="520" y="480" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="441" y="463" width="59" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualDecision_Reject" bpmnElement="Flow_ManualDecision_Reject">
+        <di:waypoint x="2225" y="410" />
+        <di:waypoint x="2300" y="410" />
+        <di:waypoint x="2300" y="910" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2306" y="573" width="47" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Archive_End" bpmnElement="Flow_Archive_End">
+        <di:waypoint x="2950" y="800" />
+        <di:waypoint x="3000" y="800" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Payment_Archive" bpmnElement="Flow_Payment_Archive">
+        <di:waypoint x="2720" y="800" />
+        <di:waypoint x="2780" y="800" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ErpSync_Payment" bpmnElement="Flow_ErpSync_Payment">
+        <di:waypoint x="2490" y="800" />
+        <di:waypoint x="2550" y="800" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Approve_ErpSync" bpmnElement="Flow_Approve_ErpSync">
+        <di:waypoint x="2260" y="800" />
+        <di:waypoint x="2320" y="800" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualDecision_Approve" bpmnElement="Flow_ManualDecision_Approve">
+        <di:waypoint x="2200" y="435" />
+        <di:waypoint x="2200" y="760" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2139" y="574" width="50" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ComplianceNeed_Gateway" bpmnElement="Flow_ComplianceNeed_Gateway">
+        <di:waypoint x="1490" y="410" />
+        <di:waypoint x="1570" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ComplianceRequired_Yes" bpmnElement="Flow_ComplianceRequired_Yes">
+        <di:waypoint x="1595" y="435" />
+        <di:waypoint x="1595" y="1040" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1574" y="755" width="12" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Update_Register" bpmnElement="Flow_Update_Register">
+        <di:waypoint x="2605" y="530" />
+        <di:waypoint x="1395" y="530" />
+        <di:waypoint x="1395" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_PrepareCompliance_DMN" bpmnElement="Flow_PrepareCompliance_DMN">
+        <di:waypoint x="1240" y="410" />
+        <di:waypoint x="1300" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Register_PrepareCompliance" bpmnElement="Flow_Register_PrepareCompliance">
+        <di:waypoint x="990" y="410" />
+        <di:waypoint x="1060" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualExtract_Register" bpmnElement="Flow_ManualExtract_Register">
+        <di:waypoint x="690" y="480" />
+        <di:waypoint x="740" y="480" />
+        <di:waypoint x="740" y="410" />
+        <di:waypoint x="790" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ComplianceCheck_Result" bpmnElement="Flow_ComplianceCheck_Result">
+        <di:waypoint x="1690" y="1080" />
+        <di:waypoint x="1785" y="1080" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ComplianceResult_Issue" bpmnElement="Flow_ComplianceResult_Issue">
+        <di:waypoint x="1835" y="1080" />
+        <di:waypoint x="2050" y="1080" />
+        <di:waypoint x="2110" y="280" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1955" y="1063" width="78" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ReceiveCorrection_Update" bpmnElement="Flow_ReceiveCorrection_Update">
+        <di:waypoint x="2700" y="275" />
+        <di:waypoint x="2700" y="490" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Request_ReceiveCorrection" bpmnElement="Flow_Request_ReceiveCorrection">
+        <di:waypoint x="2280" y="240" />
+        <di:waypoint x="2615" y="240" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualDecision_Correction" bpmnElement="Flow_ManualDecision_Correction">
+        <di:waypoint x="2200" y="385" />
+        <di:waypoint x="2200" y="275" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2196" y="329" width="73" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
