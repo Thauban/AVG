@@ -36,7 +36,7 @@ def register(worker: ZeebeWorker):
             raise Exception(f"RabbitMQ nicht erreichbar unter {RABBITMQ_HOST}:{RABBITMQ_PORT}.")
 
         channel = connection.channel()
-        channel.queue_declare(queue=RABBITMQ_QUEUE)
+        channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
 
         message = {
             "invoice_id": invoiceId,

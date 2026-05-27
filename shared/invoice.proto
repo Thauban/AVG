@@ -16,6 +16,8 @@ message InvoiceRequest {
   string customer_name = 2;
   double total_amount = 3;
   string issue_date = 4;
+  string iban = 5;
+  string currency = 6;
 }
 
 // Die Antwort des Servers (Erfolgsmeldung)
@@ -35,6 +37,8 @@ message GetInvoiceResponse {
   string customer_name = 4;
   double total_amount = 5;
   string issue_date = 6;
+  string iban = 7;
+  string currency = 8;
 }
 
 message EmptyLookup {}
@@ -44,6 +48,8 @@ message InvoiceData {
   string customer_name = 2;
   double total_amount = 3;
   string issue_date = 4;
+  string iban = 5;
+  string currency = 6;
 }
 
 message ListInvoicesResponse {

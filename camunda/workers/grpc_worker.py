@@ -15,14 +15,14 @@ from camunda.config import GRPC_SERVER
 def register(worker: ZeebeWorker):
 
     @worker.task(task_type="register-or-update-invoice-grpc")
-    async def handle(invoiceId: str, customerName: str, totalAmount: float, issueDate: str):
+    async def handle(invoiceId: str, customerName: str, totalAmount: float, issueDate: str, iban: str = "", currency: str = "EUR"):
         if not invoiceId or not customerName:
             raise Exception("Pflichtfelder fehlen: invoiceId oder customerName ist leer.")
 
         if totalAmount < 0:
             raise Exception(f"Ungültiger Betrag: {totalAmount}. Betrag darf nicht negativ sein.")
 
-        logger.info(f"[gRPC Worker] Speichere Rechnung: {invoiceId}")
+        logger.info(f"[gRPC Worker] Speichere Rechnung: {invoiceId} | IBAN: {iban} | Währung: {currency}")
 
         try:
             with grpc.insecure_channel(GRPC_SERVER) as channel:
@@ -32,6 +32,8 @@ def register(worker: ZeebeWorker):
                     customer_name=customerName,
                     total_amount=totalAmount,
                     issue_date=issueDate,
+                    iban=iban,
+                    currency=currency,
                 )
                 response = stub.SaveMetadata(request)
         except grpc.RpcError as e:
