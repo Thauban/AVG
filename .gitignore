@@ -34,3 +34,6 @@ Thumbs.db
 # Abhängigkeiten (falls lokal generiert)
 pip-log.txt
 pip-delete-this-directory.txt
+
+# KI-Kontext (lokal, nicht committen)
+GEMINI.md

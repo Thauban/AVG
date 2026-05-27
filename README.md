@@ -1,30 +1,98 @@
-# AVG Rechnungs- und Zahlungssystem (Sprint 1)
+# AVG – Automatisiertes Rechnungs- und Zahlungssystem (Gruppe 2)
 
-Hier ist unser Projekt für den ersten Sprint. Wir haben ein System gebaut, das Rechnungen über gRPC speichert und Zahlungen über RabbitMQ verarbeitet.
+Digitaler Purchase-to-Pay Prozess auf Basis von **Camunda 8 SaaS**, **Python**, **gRPC** und **RabbitMQ**.
+Rechnungen werden digital erfasst, fachlich und compliance-seitig geprüft und abschließend per Zahlungsauftrag verarbeitet.
+
+---
 
 ## Projektstruktur
-- `server/`: Der gRPC Server (speichert die Rechnungen).
-- `service/`: Das Zahlungssystem (unser RabbitMQ Worker).
-- `client/`: Ein Test-Client, um alles auszuprobieren.
-- `shared/`: Die gRPC Definitionen (.proto Datei).
-- `compose/`: Docker Einstellungen für RabbitMQ.
+
+```
+AVG/
+├── camunda/              # Camunda-Schicht (Workflow-Orchestrierung)
+│   ├── main.py           # Startet alle Zeebe Worker
+│   ├── start_process.py  # Startet neue Prozessinstanz
+│   ├── send_correction.py# Sendet Korrektur-Nachricht an wartenden Prozess
+│   ├── config.py         # Liest .env Variablen
+│   ├── compliance_check.dmn    # DMN-Entscheidungstabelle (Compliance-Schwellwerte)
+│   ├── G2_Invoice-ERP-Automation.bpmn  # BPMN-Prozessmodell
+│   └── workers/
+│       ├── grpc_worker.py      # Task: register-or-update-invoice-grpc
+│       ├── payment_worker.py   # Task: payment-execution
+│       └── archive_worker.py   # Task: archive-invoice
+├── server/               # gRPC Server (speichert Rechnungen im RAM)
+├── client/               # Test-Client für gRPC
+├── service/              # RabbitMQ Payment-Consumer
+├── shared/               # .proto Definitionen (invoice.proto)
+├── compose/              # Docker Compose für RabbitMQ
+└── docs/                 # Dokumentation und Diagramme
+```
+
+---
+
+## Architektur
+
+```
+Camunda 8 SaaS (BPMN + DMN)
+        │
+        │  Zeebe Jobs
+        ▼
+  Python Worker (pyzeebe)
+   ├── gRPC Worker       → speichert Rechnungsmetadaten
+   ├── Payment Worker    → sendet Zahlungsauftrag an RabbitMQ
+   └── Archive Worker    → archiviert abgeschlossene Rechnungen
+        │
+        ├──▶ gRPC Server (localhost:50051)
+        └──▶ RabbitMQ    (localhost:5672)
+```
+
+**Prozessablauf:**
+1. Rechnung wird erfasst und im gRPC-Server gespeichert
+2. Sachbearbeiter prüft und entscheidet (freigeben / ablehnen / Korrektur anfordern)
+3. DMN-Tabelle prüft automatisch ob Compliance-Check nötig ist (nach Betrag & Währung)
+4. Bei Bedarf: manueller Compliance-Check
+5. ERP-Buchung und finale Freigabe
+6. Zahlungsauftrag wird über RabbitMQ gesendet
+7. Rechnung wird archiviert
+
+---
 
 ## Voraussetzungen
-- Python 3
+
+- Python 3.10+
 - Docker (für RabbitMQ)
+- Camunda 8 SaaS Zugangsdaten (Cluster-ID, Client-ID, Client-Secret)
+- `.env` Datei im Projektroot (siehe unten)
 
-## Wie man es startet
+---
 
-### 1. RabbitMQ starten
-Zuerst müssen wir die Infrastruktur mit Docker starten:
-```bash
-cd compose
-docker-compose up -d
+## Einrichtung
+
+### 1. Umgebungsvariablen konfigurieren
+
+Lege eine `.env` Datei im Projektroot an:
+
+```env
+# Camunda SaaS
+CAMUNDA_CLUSTER_ID=<cluster-id>
+CAMUNDA_REGION=bru-2
+CAMUNDA_CLIENT_ID=<client-id>
+CAMUNDA_CLIENT_SECRET=<client-secret>
+
+# RabbitMQ
+RABBITMQ_HOST=localhost
+RABBITMQ_PORT=5672
+RABBITMQ_USER=admin
+RABBITMQ_PASS=<passwort>
+RABBITMQ_QUEUE=payment_queue
+
+# gRPC
+GRPC_SERVER=localhost:50051
 ```
-Danach ist das RabbitMQ Dashboard unter `http://127.0.0.1:15672` erreichbar (User: `admin`, Pass: `avg123`).
+
+> Die `.env` Datei wird nicht ins Git committed (steht in `.gitignore`).
 
 ### 2. Virtuelle Umgebung einrichten (einmalig)
-Um Abhängigkeiten sauber zu halten, nutzen wir ein Virtual Environment.
 
 **macOS / Linux:**
 ```bash
@@ -40,26 +108,82 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-*Hinweis: Bevor man die Komponenten in Schritt 3 startet, muss das venv mit `source .venv/bin/activate` (bzw. dem Windows-Befehl) in jedem Terminal aktiviert werden.*
+---
 
-### 3. Komponenten starten (in verschiedenen Terminals)
+## Starten (in verschiedenen Terminals)
 
-**Terminal 1 (Server):**
+> Alle Befehle vom **Projektroot** (`AVG/`) ausführen.
+
+### Terminal 1 – RabbitMQ starten
 ```bash
-python3 server/main.py
+cd compose
+docker-compose up -d
+```
+RabbitMQ Dashboard: `http://127.0.0.1:15672` (User: `admin`, Pass: siehe `.env`)
+
+### Terminal 2 – gRPC Server starten
+```bash
+python server/main.py
 ```
 
-**Terminal 2 (Zahlungssystem):**
+### Terminal 3 – Camunda Worker starten
+Verbindet sich mit Camunda SaaS und wartet auf eingehende Jobs:
 ```bash
-python3 service/payment_system.py
+python camunda/main.py
 ```
 
-**Terminal 3 (Client Test):**
+### Terminal 4 – Prozess starten
+Startet eine neue Prozessinstanz in Camunda:
 ```bash
-python3 client/client.py
+python camunda/start_process.py
+```
+Die Invoice-ID und der Operate-Link erscheinen in den Logs.
+
+---
+
+## Prozess in der Camunda Tasklist bearbeiten
+
+Die Aufgaben erscheinen automatisch in der **Camunda Tasklist**.
+Folgende manuelle Tasks sind im Prozess enthalten:
+
+| Formular | Beschreibung |
+|---|---|
+| Erfassung der Rechnungsdaten | Rechnungsdaten inkl. Währung eingeben |
+| Rechnung vorprüfen | Erste Prüfung durch Sachbearbeiter |
+| Rechnung fachlich prüfen | Entscheidung: freigeben / ablehnen / Korrektur |
+| Compliance-Check manuell | Manuelle Compliance-Prüfung (nur bei Bedarf) |
+| ERP-Buchung manuell | Buchung im ERP-System bestätigen |
+| Rechnung final freigeben | Abschließende Freigabe |
+
+---
+
+## Korrektur senden (falls nötig)
+
+Wenn ein Sachbearbeiter „Korrektur anfordern" auswählt, wartet der Prozess auf eine Korrektur-Nachricht.
+Die Invoice-ID steht in den Logs von `start_process.py`.
+
+```bash
+python camunda/send_correction.py <invoiceId>
 ```
 
-## Was wir gemacht haben
-- Wir nutzen **gRPC** für die Kommunikation zwischen Client und Server (schnell und sicher).
-- Für die Zahlungen nutzen wir **RabbitMQ**, damit der Prozess asynchron läuft.
-- Alles ist in Docker verpackt, damit es überall gleich läuft.
+---
+
+## DMN – Compliance-Schwellwerte
+
+Die Compliance-Prüfung läuft automatisch per DMN-Tabelle (`compliance_check.dmn`).
+Rechnungen über den folgenden Schwellwerten werden zur manuellen Compliance-Prüfung weitergeleitet:
+
+| Währung | Schwellwert |
+|---|---|
+| EUR | > 10.000 |
+| CHF | > 10.800 |
+| GBP | > 8.700 |
+| USD | > 11.000 |
+
+---
+
+## Bekannte Einschränkungen
+
+- Rechnungen werden **im RAM gespeichert** – Daten gehen beim Neustart des gRPC-Servers verloren.
+- Der `archive_worker.py` archiviert nur in die Logs, kein persistentes Archiv.
+- Der Prozessstart erfolgt aktuell manuell per CLI (`start_process.py`), nicht automatisch per E-Mail.
