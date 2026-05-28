@@ -1,19 +1,16 @@
 SET default_tablespace = rechnungspace;
 
 -- =========================
--- Mitarbeiter
+-- Rechnung
 -- =========================
-CREATE TABLE IF NOT EXISTS mitarbeiter (
-    id              INTEGER GENERATED ALWAYS AS IDENTITY(START WITH 1000) PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS rechnung (
+    invoice_id      TEXT PRIMARY KEY DEFAULT ('INV-2024-' || LPAD(nextval('invoice_seq')::text, 3, '0')),
     version         INTEGER NOT NULL DEFAULT 0,
-    nachname        TEXT NOT NULL,
-    email           TEXT NOT NULL UNIQUE,
-    "position"        "position" NOT NULL,
-    gehalt          NUMERIC(10,2) NOT NULL CHECK (gehalt >= 0),
-    eintrittsdatum  DATE NOT NULL CHECK (eintrittsdatum <= current_date),
-    homepage        TEXT,
-    geschlecht      geschlecht,
-    username        TEXT NOT NULL,
+    customer_name   TEXT NOT NULL,
+    IBAN            VARCHAR(34) NOT NULL,
+    total_amount    NUMERIC(10, 2) NOT NULL,
+    currency        VARCHAR(3) NOT NULL,
+    issue_date      DATE NOT NULL,
     erzeugt         TIMESTAMP NOT NULL,
     aktualisiert    TIMESTAMP NOT NULL
 );
