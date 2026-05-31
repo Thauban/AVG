@@ -11,6 +11,8 @@ import invoice_pb2
 import invoice_pb2_grpc
 from camunda.config import GRPC_SERVER
 
+# Bewertet eine Rechnung fachlich nach einfachen, nachvollziehbaren Risikoregeln.
+# Das Ergebnis stoppt den Prozess nicht automatisch, sondern wird als Prozessvariable an Camunda zurueckgegeben.
 def calculate_risk_score(total_amount: float, iban: str = "", currency: str = "EUR", customer_name: str = ""):
     score = 0
     reasons = []
@@ -21,6 +23,7 @@ def calculate_risk_score(total_amount: float, iban: str = "", currency: str = "E
 
     allowed_currencies = {"EUR", "CHF", "GBP", "USD"}
 
+    # Betraege werden nach Hoehe bewertet: je hoeher oder unplausibler, desto hoeher das Risiko.
     if total_amount <= 0:
         score += 80
         reasons.append("Betrag ist 0 oder negativ")
@@ -34,6 +37,7 @@ def calculate_risk_score(total_amount: float, iban: str = "", currency: str = "E
         score += 25
         reasons.append("Betrag ueber 5.000")
 
+    # Waehrungen ausserhalb der erlaubten Liste werden als fachliche Auffaelligkeit markiert.
     if not currency_clean:
         score += 40
         reasons.append("Waehrung fehlt")
@@ -41,6 +45,7 @@ def calculate_risk_score(total_amount: float, iban: str = "", currency: str = "E
         score += 40
         reasons.append(f"Nicht unterstuetzte Waehrung: {currency_clean}")
 
+    # Die IBAN wird nur auf Plausibilitaet geprueft, nicht mit einer echten Bankvalidierung.
     if not iban_clean:
         score += 50
         reasons.append("IBAN fehlt")
@@ -54,6 +59,7 @@ def calculate_risk_score(total_amount: float, iban: str = "", currency: str = "E
         score += 20
         reasons.append("Auslands-IBAN")
 
+    # Platzhalter-Kundennamen helfen dabei, Test- oder Dummy-Daten in der Demo sichtbar zu machen.
     if not customer_clean:
         score += 30
         reasons.append("Kundenname fehlt")
@@ -76,6 +82,8 @@ def calculate_risk_score(total_amount: float, iban: str = "", currency: str = "E
     return score, level, reasons
 
 
+# Prueft Pflichtdaten, ohne die der Prozess nicht sinnvoll weiterlaufen darf.
+# Bei Fehlern wird eine Exception geworfen; Camunda erzeugt daraus einen Incident am Service Task.
 def validate_required_invoice_data(total_amount: float, iban: str = "", currency: str = "EUR"):
     currency_clean = (currency or "").upper().strip()
     iban_clean = (iban or "").replace(" ", "").upper()
@@ -114,9 +122,11 @@ def register(worker: ZeebeWorker):
         risk_score, risk_level, risk_reasons = calculate_risk_score(totalAmount, iban, currency, customerName)
         risk_text = "; ".join(risk_reasons)
 
+        # Harte Validierung vor der Speicherung, damit falsche Pflichtdaten nicht im System landen.
         validate_required_invoice_data(totalAmount, iban, currency)
 
         try:
+            # Uebergibt die Rechnungsmetadaten an den lokalen gRPC-Server.
             with grpc.insecure_channel(GRPC_SERVER) as channel:
                 stub = invoice_pb2_grpc.InvoiceServiceStub(channel)
                 request = invoice_pb2.InvoiceRequest(
@@ -152,6 +162,7 @@ def register(worker: ZeebeWorker):
                 customer_display,
             )
 
+        # Diese Werte erscheinen in Operate als Camunda-Prozessvariablen.
         return {
             "grpcSaved": True,
             "riskScore": risk_score,
