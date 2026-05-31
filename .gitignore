@@ -37,3 +37,9 @@ pip-delete-this-directory.txt
 
 # KI-Kontext (lokal, nicht committen)
 GEMINI.md
+
+# TLS-Zertifikate und private Schlüssel (niemals ins Repo!)
+*.crt
+*.key
+*.pem
+**/tls/
