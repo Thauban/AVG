@@ -49,7 +49,7 @@ def main():
         channel = connection.channel()
 
         # Sicherstellen, dass die payment_queue existiert
-        channel.queue_declare(queue=RABBITMQ_QUEUE)
+        channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
 
         # Nur eine Nachricht nach der anderen bearbeiten also keine neue Nachricht bevor ack
         channel.basic_qos(prefetch_count=1)
