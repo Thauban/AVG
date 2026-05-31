@@ -75,6 +75,31 @@ def calculate_risk_score(total_amount: float, iban: str = "", currency: str = "E
 
     return score, level, reasons
 
+
+def validate_required_invoice_data(total_amount: float, iban: str = "", currency: str = "EUR"):
+    currency_clean = (currency or "").upper().strip()
+    iban_clean = (iban or "").replace(" ", "").upper()
+    allowed_currencies = {"EUR", "CHF", "GBP", "USD"}
+
+    if total_amount <= 0:
+        raise Exception("Validierungsfehler: Betrag muss groesser als 0 sein.")
+
+    if not currency_clean:
+        raise Exception("Validierungsfehler: Waehrung fehlt. Erlaubt sind EUR, CHF, GBP und USD.")
+
+    if currency_clean not in allowed_currencies:
+        raise Exception(f"Validierungsfehler: Waehrung '{currency_clean}' wird nicht unterstuetzt.")
+
+    if not iban_clean:
+        raise Exception("Validierungsfehler: IBAN fehlt.")
+
+    if len(iban_clean) < 15:
+        raise Exception("Validierungsfehler: IBAN ist zu kurz.")
+
+    if not iban_clean[:2].isalpha() or not iban_clean[2:4].isdigit():
+        raise Exception("Validierungsfehler: IBAN-Format ist ungueltig.")
+
+
 def register(worker: ZeebeWorker):
 
     @worker.task(task_type="register-or-update-invoice-grpc")
@@ -82,12 +107,14 @@ def register(worker: ZeebeWorker):
         if not invoiceId or not customerName:
             raise Exception("Pflichtfelder fehlen: invoiceId oder customerName ist leer.")
 
-        if totalAmount < 0:
-            raise Exception(f"Ungültiger Betrag: {totalAmount}. Betrag darf nicht negativ sein.")
-
         currency_display = currency or "fehlt"
         iban_display = iban or "fehlt"
         customer_display = customerName or "fehlt"
+
+        risk_score, risk_level, risk_reasons = calculate_risk_score(totalAmount, iban, currency, customerName)
+        risk_text = "; ".join(risk_reasons)
+
+        validate_required_invoice_data(totalAmount, iban, currency)
 
         try:
             with grpc.insecure_channel(GRPC_SERVER) as channel:
@@ -106,9 +133,6 @@ def register(worker: ZeebeWorker):
 
         if not response.success:
             raise Exception(f"gRPC Fehler: {response.message}")
-
-        risk_score, risk_level, risk_reasons = calculate_risk_score(totalAmount, iban, currency, customerName)
-        risk_text = "; ".join(risk_reasons)
 
         if risk_level == "LOW":
             logger.success(
