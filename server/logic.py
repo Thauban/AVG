@@ -10,6 +10,11 @@ class InvoiceLogic:
         if total_amount < 0:
             return None, "Betrag darf nicht negativ sein!"
         
+        # Ist die Rechnung schon vorhanden? (Doppelte ID)
+        existing_invoice = self.repo.get_object(invoice_id)
+        if existing_invoice:
+            return None, "Rechnung mit dieser ID existiert bereits!"
+
         # Falls kein Datum mitgegeben wurde, generieren wir eins.
         date_to_save = issue_date if issue_date else str(datetime.date.today())
 
