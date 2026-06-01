@@ -10,7 +10,6 @@
 - [Erweiterung PostgreSQL für VS Code](#erweiterung-postgresql-für-vs-code)
   - [Konfiguration](#konfiguration)
   - [DB-Schema visualisieren](#db-schema-visualisieren)
-  - [Chat mit Copilot](#chat-mit-copilot)
 
 ## Named Volumes erstellen
 
