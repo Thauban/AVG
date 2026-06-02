@@ -34,7 +34,7 @@ def register(worker: ZeebeWorker):
             )
             channel = connection.channel()
             # Queue muss existieren. Durable muss mit dem übereinstimmen, was in RabbitMQ bereits definiert ist.
-            channel.queue_declare(queue=RABBITMQ_QUEUE, durable=False)
+            channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
         except pika.exceptions.AMQPConnectionError as e:
             logger.error(f"RabbitMQ Connection Error: {e}")
             raise Exception(f"RabbitMQ nicht erreichbar unter {RABBITMQ_HOST}:{RABBITMQ_PORT}. Details: {e}")
