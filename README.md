@@ -108,6 +108,17 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+### 3. Proto-Dateien generieren (einmalig)
+
+Die generierten gRPC-Dateien sind nicht im Git — sie müssen lokal erstellt werden:
+
+```bash
+python -m grpc_tools.protoc -I shared --python_out=client --grpc_python_out=client shared/invoice.proto
+python -m grpc_tools.protoc -I shared --python_out=server --grpc_python_out=server shared/invoice.proto
+```
+
+> Nach jeder Änderung an `shared/invoice.proto` muss dieser Schritt wiederholt werden.
+
 ---
 
 ## Starten (in verschiedenen Terminals)
@@ -185,5 +196,5 @@ Rechnungen über den folgenden Schwellwerten werden zur manuellen Compliance-Pr�
 ## Bekannte Einschränkungen
 
 - Rechnungen werden **im RAM gespeichert** – Daten gehen beim Neustart des gRPC-Servers verloren.
-- Der `archive_worker.py` archiviert nur in die Logs, kein persistentes Archiv.
+- Der `archive_worker.py` archiviert Rechnungen als JSON-Dateien in `archive/invoices/` (lokal, nicht im Git).
 - Der Prozessstart erfolgt aktuell manuell per CLI (`start_process.py`), nicht automatisch per E-Mail.
