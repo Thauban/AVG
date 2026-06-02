@@ -4,3 +4,4 @@ pika
 loguru
 python-dotenv
 pyzeebe
+psycopg2-binary

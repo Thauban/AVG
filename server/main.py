@@ -1,7 +1,10 @@
 "main-Datei unseres Servers"
+from json import load
+import os
 import grpc
 from concurrent import futures
 from loguru import logger
+from dotenv import load_dotenv
 
 import invoice_pb2_grpc
 
@@ -9,9 +12,15 @@ from repository import InvoiceRepository
 from logic import InvoiceLogic
 from router import InvoiceRouter
 
+load_dotenv()  # Lädt die Umgebungsvariablen aus der .env-Datei
+
 def serve():
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        logger.error("DATABASE_URLnicht gegeben. Bitte definiere DATABASE_URL in der .env-Datei.")
+        return
     # Zuerst das Repository (der Datenspeicher)
-    repo = InvoiceRepository()
+    repo = InvoiceRepository(dsn=DATABASE_URL)
     
     # Dann die Logik (sie bekommt das Repo übergeben)
     logic = InvoiceLogic(repo)

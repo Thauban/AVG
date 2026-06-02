@@ -5,7 +5,7 @@ class InvoiceLogic:
     def __init__(self, repository):
         self.repo = repository
 
-    def validate_and_create(self, invoice_id, customer_name, total_amount, issue_date, iban="", currency="EUR"):
+    def validate_and_create(self, invoice_id, customer_name, total_amount, issue_date, iban, currency):
         # Ist die Rechnung gültig? (kein negativer Betrag)
         if total_amount < 0:
             return None, "Betrag darf nicht negativ sein!"
