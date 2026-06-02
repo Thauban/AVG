@@ -32,11 +32,15 @@ def register(worker: ZeebeWorker):
             connection = pika.BlockingConnection(
                 pika.ConnectionParameters(host=RABBITMQ_HOST, port=RABBITMQ_PORT, credentials=credentials)
             )
-        except pika.exceptions.AMQPConnectionError:
-            raise Exception(f"RabbitMQ nicht erreichbar unter {RABBITMQ_HOST}:{RABBITMQ_PORT}.")
-
-        channel = connection.channel()
-        channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
+            channel = connection.channel()
+            # Queue muss existieren. Durable muss mit dem übereinstimmen, was in RabbitMQ bereits definiert ist.
+            channel.queue_declare(queue=RABBITMQ_QUEUE, durable=False)
+        except pika.exceptions.AMQPConnectionError as e:
+            logger.error(f"RabbitMQ Connection Error: {e}")
+            raise Exception(f"RabbitMQ nicht erreichbar unter {RABBITMQ_HOST}:{RABBITMQ_PORT}. Details: {e}")
+        except Exception as e:
+            logger.error(f"RabbitMQ Error: {e}")
+            raise Exception(f"Fehler bei RabbitMQ Operation: {e}")
 
         message = {
             "invoice_id": invoiceId,
