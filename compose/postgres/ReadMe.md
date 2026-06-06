@@ -1,254 +1,128 @@
-## Inhalt
+# PostgreSQL Datenbank Setup
 
-- [Docker Container vs. Installation auf dem Host-Rechner](#docker-container-vs-installation-auf-dem-host-rechner)
-- [Named Volumes erstellen](#named-volumes-erstellen)
-- [Named Volumes initialisieren](#named-volumes-initialisieren)
-- [Installation ohne TLS](#installation-ohne-tls)
-- [Datenbank, Datenbank-User, Schema, Tabellen und Daten anlegen](#datenbank-datenbank-user-schema-tabellen-und-daten-anlegen)
-- [Ausgewählte Administrationskommandos für PostgreSQL](#ausgewählte-administrationskommandos-für-postgresql)
-- [Optional: TLS für den PostgreSQL-Server mit OpenSSL überprüfen](#optional-tls-für-den-postgresql-server-mit-openssl-überprüfen)
-- [Erweiterung PostgreSQL für VS Code](#erweiterung-postgresql-für-vs-code)
-  - [Konfiguration](#konfiguration)
-  - [DB-Schema visualisieren](#db-schema-visualisieren)
+> Alle Befehle werden vom **Projektroot** (`AVG/`) ausgeführt, außer es steht etwas anderes dabei.
 
-## Named Volumes erstellen
+## Voraussetzungen
 
-Zunächst werden _Named Volumes_ in Docker eingerichtet für
+- Docker installiert
+- Passwortdatei `pw.txt` im Ordner `compose/postgres/` (nicht im Git, selbst anlegen)
 
-- die Datenbanken
-- die Tablespaces
-- SQL-Skripte zum Neuanlegen der DB und des Schemas
-- Zertifikat und privater Schlüssel für TLS.
-
-```shell
-    docker volume create pg_data
-    docker volume create pg_tablespace
-    docker volume create pg_init
+```
+compose/postgres/pw.txt  →  Inhalt: x
 ```
 
-Für Details zu Volumes siehe https://docs.docker.com/engine/storage/volumes.
+---
 
-## Named Volumes initialisieren
+## Schritt 1 – Named Volumes erstellen (einmalig)
 
-Mit dem _Hardened Image_ für _PostgreSQL_ `dhi.io/postgres` wird ein Container
-so gestartet, dass nur eine _Bash_ mit dem Linux-Superuser mit UID `0` läuft.
-Es wird lediglich das Dateisystem vom PostgreSQL-Image einschließlich der Named Volumes
-für Kopiervorgänge in die neu angelegten Named Volumes benötigt sowie die
-Berechtigung zum Ändern vom Linux-Owner und von der Linux-Group (s.u.).
-`dhi` steht übrigens für _Docker Hardened Image_.
+> Verzeichnis: `AVG/` (Projektroot)
 
-```shell
-    # Windows
-    cd extras\compose\postgres
-    docker run -v pg_init:/init -v pg_tablespace:/tablespace -v ./init:/tmp/init:ro `
-      --rm -it -u 0 --entrypoint '' dhi.io/postgres:18.3-debian13 /bin/bash
+```bash
+docker volume create avg_data
+docker volume create avg_tablespace
+docker volume create avg_init
 ```
 
-Um die SQL-Skripte sowie Zertifikat und privater Schlüssel für TLS aus dem
-Original-Verzeichnis `init\rechnung\sql` bzw. `init\rechnung\tls` in das Named Volume
-`pg_init` kopieren zu können, wurde das lokale Verzeichnis `.\init` in `/tmp/init`
-bereitgestellt. In der _bash_ werden deshalb die SQL-Skripte sowie Zertifikat und
-privater Schlüssel aus dem Verzeichnis `/tmp/init` nach `/init` und deshalb in
-das Named Volume `pg_init` kopiert. Danach wird das Verzeichnis `/tablespace/rechnung`
-angelegt, welches im Named Volume `pg_tablespace` liegt. Jetzt wird bei den Dateien
-der Owner und die Gruppe auf `postgres` gesetzt sowie die Zugriffsrechte auf Oktal
-`400`, d.h. nur der Owner hat Leserechte.
+---
 
-```shell
-    cp -r /tmp/init/* /init
-    mkdir /tablespace/rechnung
-    chown -R postgres:postgres /init /tablespace
-    chmod 400 /init/*/sql/* /init/tls/*
-    ls -lR /init
-    ls -l /tablespace
-    exit
+## Schritt 2 – Dateien in Volume kopieren
+
+> Verzeichnis: `AVG/` (Projektroot)
+
+```bash
+docker run \
+  -v avg_init:/init \
+  -v avg_tablespace:/tablespace \
+  -v ./compose/postgres/init:/tmp/init:ro \
+  --rm -it -u 0 --entrypoint '' \
+  dhi.io/postgres:18.3-debian13 /bin/bash
 ```
 
-## Installation ohne TLS
+In der Container-Bash dann:
 
-Für _TLS_ erwartet _PostgreSQL_ standardmäßig die Dateien `server.crt` und
-`server.key` im Verzeichnis `/var/lib/postgresql/18/data`, was aber zu Beginn
-der Installation leer sein muss. Deshalb wird der PostgreSQL-Server zunächst
-ohne TLS gestartet, damit `/var/lib/postgresql/18/data` initialisiert wird.
-Dazu muss in `compose.yml` temporär die Zeile `command: ...` auskommentiert
-werden. Danach wird der PostgreSQL-Server mit dem _Hardened Image_ als
-Docker-Container gestartet
-
-```shell
-    # in der 1. Shell
-    docker compose up db
+```bash
+cp -r /tmp/init/* /init
+mkdir /tablespace/rechnung
+chown -R postgres:postgres /init /tablespace
+chmod 400 /init/Rechnung/sql/* /init/tls/*
+exit
 ```
 
-Nachdem in der ersten Shell der Server erfolgreich gestartet und initialisiert
-ist, werden `server.crt` und `server.key` aus dem Named Volume `pg_init`, d.h.
-aus dem Verzeichnis `/init/tls`, in das Verzeichnis `/var/lib/postgresql/18/data`
-kopiert. Danach wird der Server bzw. Container wieder heruntergefahren, da er
-noch ohne TLS läuft.
+---
 
-```shell
-    # in der 2. Shell
-    docker compose exec db bash -c 'cp /init/tls/* /var/lib/postgresql/18/data'
-    docker compose down
+## Schritt 3 – Server einmalig ohne TLS starten (für Initialisierung)
+
+> Verzeichnis: `AVG/compose/postgres/`
+
+In `compose.yml` die Zeile `command: ["-c", "ssl=on"]` auskommentieren, dann:
+
+```bash
+# Terminal 1
+docker compose up db
+
+# Terminal 2 – TLS-Zertifikate kopieren
+docker compose exec db bash -c 'cp /init/tls/* /var/lib/postgresql/18/data'
+docker compose down
 ```
 
-## Datenbank, Datenbank-User, Schema, Tabellen und Daten anlegen
+Danach `command: ["-c", "ssl=on"]` wieder einkommentieren.
 
-In der 1. Shell startet man wieder den DB-Server als Docker Container, und zwar
-jetzt mit TLS:
+---
 
-```shell
-    docker compose up
+## Schritt 4 – Server mit TLS starten und Datenbank anlegen
+
+> Verzeichnis: `AVG/compose/postgres/`
+
+```bash
+# Terminal 1
+docker compose up
+
+# Terminal 2
+docker compose exec db bash
 ```
 
-In der 2. Shell werden die beiden SQL-Skripte ausgeführt, um zunächst eine neue
-DB `rechnung` mit dem DB-User `rechnung`anzulegen. Mit dem 2. Skript wird das Schema
-`rechnung` mit dem DB-User `rechnung` als _Owner_ angelegt. Abschließend werden die
-Tabellen angelegt und mit Testdaten aus den CSV-Dateien aus dem Verzeichnis
-`/init/rechnung/csv` im Named Volume `pg_init` gefüllt.
+In der Container-Bash:
 
-```shell
-    docker compose exec db bash
-        psql --dbname=postgres --username=postgres --file=/init/rechnung/sql/create-db.sql
-        psql --dbname=rechnung --username=sachbearbeiter --file=/init/rechnung/sql/create-schema.sql
-
-        psql --dbname=rechnung --username=sachbearbeiter --file=/init/rechnung/sql/create-table.sql
-        psql --dbname=rechnung --username=postgres --file=/init/rechnung/sql/copy-csv.sql
-        exit
-    docker compose down
+```bash
+psql --dbname=postgres --username=postgres --file=/init/Rechnung/sql/create-db.sql
+psql --dbname=rechnung --username=sachbearbeiter --file=/init/Rechnung/sql/create-schema.sql
+psql --dbname=rechnung --username=sachbearbeiter --file=/init/Rechnung/sql/create.sql
+psql --dbname=rechnung --username=postgres --file=/init/Rechnung/sql/copy-csv.sql
+exit
 ```
 
-Die SQL-Skripte `copy-csv.sql` und `create-table.sql` im Verzeichnis
-`extras\compose\postgres\sql` sind Kopien der Original-Skripte aus dem Verzeichnis
-`src\config\resources\postgresql`, wo sie später für den _Nest_-basierten
-Appserver benötigt werden, d.h. eventuelle Änderungen müssen im Verzeichnis
-`src\config\resources\postgresql` vorgenommen werden. Durch die Kopien kann aber
-die Datenbank nach der Installation über das Named Volume mit Testdaten gefüllt
-werden kann.
+Danach:
 
-## Ausgewählte Administrationskommandos für PostgreSQL
-
-Zunächst muss natürlich der PostgreSQL-Server gestartet sein:
-
-```shell
-    docker compose up
+```bash
+docker compose down
 ```
 
-Danach kann man in einer zweiten Shell `psql`, d.h. das CLI von PostgreSQL, aufrufen:
+---
 
-```shell
-    docker compose exec db bash -c 'psql --dbname=postgres --username=postgres'
-        -- absoluter Dateiname fuer i.a. postgresql.conf
-        SHOW config_file;
+## Schritt 5 – Normal starten
 
-        -- absoluter Dateiname fuer i.a. pg_hba.conf ("host-based authentication")
-        SHOW hba_file;
+> Verzeichnis: `AVG/compose/postgres/`
 
-        -- Algorithmus zur Verschluesselung von Passwoertern, z.B. scram-sha-256 (siehe pg_hba.conf)
-        -- SCRAM = Salted Challenge Response Authentication Mechanism
-        -- https://www.rfc-editor.org/rfc/rfc7677
-        -- https://www.rfc-editor.org/rfc/rfc9266
-        SHOW password_encryption;
-
-        -- Benutzernamen und verschluesselte Passwoerter
-        SELECT rolname, rolpassword FROM pg_authid;
-
-        -- Laeuft der Server mit TLS?
-        SHOW ssl;
-
-        -- Datei mit dem Zertifikat fuer TLS
-        SHOW ssl_cert_file;
-
-        -- Datei mit dem privaten Schluessel fuer TLS
-        SHOW ssl_key_file;
-
-        -- alle Einstellungen bzw. Konfigurationsparameter
-        SELECT name, setting, source FROM pg_settings;
-
-        -- psql beenden ("quit")
-        \q
+```bash
+docker compose up
 ```
 
-## Optional: TLS für den PostgreSQL-Server mit OpenSSL überprüfen
+Die Datenbank ist erreichbar unter `localhost:5432`.
 
-Jetzt kann man bei Bedarf noch die TLS-Konfiguration für den PostgreSQL-Server
-überprüfen. Dazu muss der PostgreSQL-Server natürlich gestartet sein (s.o.).
-In einer Shell startet man einen Docker Container mit dem Image `nicolaka/netshoot`,
-der dasselbe virtuelle Netzwerk nutzt wie der PostgreSQL-Server:
+---
 
-```shell
-    # Windows
-    cd extras\compose\debug
-    # macOS
-    cd extras/compose/debug
+## Nützliche psql-Befehle
 
-    docker compose up
+> Verzeichnis: `AVG/compose/postgres/`
+
+```bash
+docker compose exec db bash -c 'psql --dbname=rechnung --username=sachbearbeiter'
 ```
 
-In einer weiteren Shell startet man eine `bash` für diesen Docker Container, um
-darin mit `openssl` eine TLS-Verbindung über das virtuelle Netzwerk mit dem
-PostgreSQL-Server aufzubauen.
+```sql
+-- Alle Rechnungen anzeigen
+SELECT * FROM rechnung.rechnung;
 
-```shell
-    # Windows
-    cd extras\compose\debug
-    # macOS/Linux
-    cd extras/compose/debug
-
-    docker compose exec netshoot bash -c 'openssl s_client -tls1_3 -trace postgres:5432'
-    docker compose down
+-- Verbindung trennen
+\q
 ```
-
-Die Ausgabe vom Kommando `openssl` zeigt u.a. folgendes an:
-
-- das selbst-signierte Zertifikat
-- S(ubject)
-- CN (Common Name)
-- OU (Organizational Unit)
-- O(rganization)
-- L(ocation)
-- ST(ate)
-- C(ountry)
-
-## Erweiterung PostgreSQL für VS Code
-
-Für VS Code gibt übrigens auch folgende Erweiterungen:
-
-- _SQL Server (mssql)_ von _Microsoft_ mit KI-Unterstützung durch Copilot
-- _Oracle SQL Developer Extension for VS Code_ von _Oracle_ **ohne** KI-Unterstützung durch Copilot
-- Für MySQL gibt es folgende Erweiterungen:
-  - _MySQL_ von Jun Han: wird seit 2023 nicht mehr gepflegt bzw. weiterentwickelt
-  - _MySQL_ von "Database Client" (?): **ohne** KI-Unterstützung durch Copilot
-
-### Konfiguration
-
-Mit der Erweiterung _PostgreSQL_ für VS Code kann man die Datenbank `rechnung` und
-deren Daten verwalten. Man klickt man auf _+ Verbindung hinzufügen_
-und gibt beim Karteireiter _Parameter_ folgende Werte ein:
-
-- SERVER NAME: z.B. `localhost`
-- USER NAME: `postgres` (siehe `compose.yml`)
-- PASSWORD: `p` (siehe `compose.yml`)
-- KENNWORT SPEICHERN: Haken setzen, damit man nicht immer das Passwort eingeben muss
-- DATABASE NAME: `postgres` (das Data Dictionary)
-
-Danacht klickt man auf den Button _Erweitert_, klappt das Menü _SSL_ auf und
-gibt folgende Werte ein:
-
-- SSL MODE: _require_ auswählen
-- SSL CERTIFICATE FILENAME: im Verzeichnis `extras\compose\postgres\init\tls`
-  die Datei `server.crt` auswählen
-- SSL KEY FILENAME: im Verzeichnis `extras\compose\postgres\init\tls`
-  die Datei `server.key` auswählen
-
-Jetzt den modalen Dialog schließen, d.h. rechts oben auf _X_ klicken, und danach
-den Button _Verbindung testen_ anklicken. Wenn dann im Button ein Haken erscheint,
-kann man den anderen Button _Save & Connect_ anklicken, um die Verbindung zu speichern.
-Im Untermenü _Databases_ von der Verbindung sieht man dann z.B. die Datenbank `rechnung`
-mit dem gleichnamigen Schema `rechnung` und die Datenbank `postgres`.
-Ebenso kann man man unter _Roles_ den DB-User `rechnung` und den Superuser `postgres`
-sehen sowie bei _Tablespaces_ den Default-Tablespace `pg_default` und den
-eigenen Tablespace.
-
-### DB-Schema visualisieren
-
-Im Kontextmenü für eine DB den Menüpunkt _Schema visualisieren_ anklicken.
