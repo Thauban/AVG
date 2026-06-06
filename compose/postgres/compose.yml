@@ -6,9 +6,9 @@ services:
         target: 5432
     command: ["-c", "ssl=on"]
     volumes:
-      - pg_data:/var/lib/postgresql/18/data
-      - pg_tablespace:/tablespace
-      - pg_init:/init:ro
+      - avg_data:/var/lib/postgresql/18/data
+      - avg_tablespace:/tablespace
+      - avg_init:/init:ro
     environment:
       TZ: Europe/Berlin
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
@@ -42,14 +42,14 @@ secrets:
     file: ./pw.txt
 
 volumes:
-  pg_data:
-    name: pg_data
+  avg_data:
+    name: avg_data
     external: true
-  pg_tablespace:
-    name: pg_tablespace
+  avg_tablespace:
+    name: avg_tablespace
     external: true
-  pg_init:
-    name: pg_init
+  avg_init:
+    name: avg_init
     external: true
 
 networks:
