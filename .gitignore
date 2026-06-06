@@ -41,6 +41,9 @@ archive/
 # KI-Kontext (lokal, nicht committen)
 GEMINI.md
 
+# Datenbank-Passwort
+pw.txt
+
 # TLS-Zertifikate und private Schlüssel (niemals ins Repo!)
 *.crt
 *.key
