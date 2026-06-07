@@ -10,6 +10,17 @@ service InvoiceService {
   rpc DeleteInvoice (InvoiceLookupRequest) returns (InvoiceResponse);
 }
 
+message Position {
+  string beschreibung = 1;
+  double menge = 2;
+  string einheit = 3;
+  double einzelpreis = 4;
+  double steuer_prozent = 5;
+  double netto = 6;
+  double steuer = 7;
+  double brutto = 8;
+}
+
 // Die Metadaten einer Rechnung
 message InvoiceRequest {
   string invoice_id = 1;
@@ -18,6 +29,9 @@ message InvoiceRequest {
   string issue_date = 4;
   string iban = 5;
   string currency = 6;
+  repeated Position positionen = 7;
+  string kundennummer = 8;
+  string zahlungsziel = 9;
 }
 
 // Die Antwort des Servers (Erfolgsmeldung)
