@@ -22,7 +22,7 @@ PROCESS_ID = "Process_Soll_P2P_Sprint3_Improved"
 now           = datetime.now()
 timestamp     = now.strftime("%Y%m%d-%H%M%S")
 invoice_id    = sys.argv[1] if len(sys.argv) > 1 else f"INV-{timestamp}"
-total_amount  = float(sys.argv[2]) if len(sys.argv) > 2 else 4500.00
+total_amount  = float(sys.argv[2]) if len(sys.argv) > 2 else 0.0
 currency      = sys.argv[3] if len(sys.argv) > 3 else "EUR"
 customer_name = sys.argv[4] if len(sys.argv) > 4 else "Max Mustermann GmbH"
 iban          = sys.argv[5] if len(sys.argv) > 5 else "DE89370400440532013000"
@@ -31,11 +31,29 @@ input_channel = sys.argv[6] if len(sys.argv) > 6 else "mail"
 TEST_INVOICE = {
     "invoiceId": invoice_id,
     "customerName": customer_name,
-    "totalAmount": total_amount,
+    "totalAmount": 0.0,
     "issueDate": now.strftime("%Y-%m-%d"),
     "iban": iban,
     "currency": currency,
     "inputChannel": input_channel,
+    "kundennummer": "KD-001",
+    "zahlungsziel": "14 Tage netto",
+    "positionen": [
+        {
+            "beschreibung": "Laptop Dell XPS 15",
+            "menge": 2,
+            "einheit": "Stk.",
+            "einzelpreis": 1200.00,
+            "steuerProzent": 19,
+        },
+        {
+            "beschreibung": "Maus Logitech MX",
+            "menge": 5,
+            "einheit": "Stk.",
+            "einzelpreis": 80.00,
+            "steuerProzent": 19,
+        },
+    ],
 }
 
 

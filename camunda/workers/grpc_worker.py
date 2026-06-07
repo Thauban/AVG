@@ -108,10 +108,41 @@ def validate_required_invoice_data(total_amount: float, iban: str = "", currency
         raise Exception("Validierungsfehler: IBAN-Format ist ungueltig.")
 
 
+def _build_positionen(raw):
+    positionen = []
+    for r in raw:
+        beschreibung = r.get("beschreibung", "")
+        menge = float(r.get("menge", 0) or 0)
+        einzelpreis = float(r.get("einzelpreis", 0) or 0)
+        steuer_prozent = float(r.get("steuerProzent", 19) or 19)
+        einheit = r.get("einheit", "Stk.") or "Stk."
+
+        if not beschreibung or menge <= 0 or einzelpreis <= 0:
+            continue
+
+        netto = round(menge * einzelpreis, 2)
+        steuer = round(netto * (steuer_prozent / 100), 2)
+        brutto = round(netto + steuer, 2)
+
+        positionen.append(invoice_pb2.Position(
+            beschreibung=beschreibung,
+            menge=menge,
+            einheit=einheit,
+            einzelpreis=einzelpreis,
+            steuer_prozent=steuer_prozent,
+            netto=netto,
+            steuer=steuer,
+            brutto=brutto,
+        ))
+    return positionen
+
+
 def register(worker: ZeebeWorker):
 
     @worker.task(task_type="register-or-update-invoice-grpc")
-    async def handle(invoiceId: str, customerName: str, totalAmount: float, issueDate: str, iban: str = "", currency: str = "EUR"):
+    async def handle(invoiceId: str, customerName: str, totalAmount: float, issueDate: str,
+                     iban: str = "", currency: str = "EUR",
+                     positionen: list = [], kundennummer: str = "", zahlungsziel: str = ""):
         if not invoiceId or not customerName:
             raise Exception("Pflichtfelder fehlen: invoiceId oder customerName ist leer.")
 
@@ -122,7 +153,13 @@ def register(worker: ZeebeWorker):
         risk_score, risk_level, risk_reasons = calculate_risk_score(totalAmount, iban, currency, customerName)
         risk_text = "; ".join(risk_reasons)
 
-        # Harte Validierung vor der Speicherung, damit falsche Pflichtdaten nicht im System landen.
+        grpc_positionen = _build_positionen(positionen)
+
+        # Gesamtbetrag aus Positionen berechnen falls vorhanden
+        if grpc_positionen:
+            totalAmount = round(sum(p.brutto for p in grpc_positionen), 2)
+
+        # Harte Validierung nach Berechnung, damit der korrekte Betrag geprueft wird.
         validate_required_invoice_data(totalAmount, iban, currency)
 
         try:
@@ -136,6 +173,9 @@ def register(worker: ZeebeWorker):
                     issue_date=issueDate,
                     iban=iban,
                     currency=currency,
+                    positionen=grpc_positionen,
+                    kundennummer=kundennummer,
+                    zahlungsziel=zahlungsziel,
                 )
                 response = stub.SaveMetadata(request)
         except grpc.RpcError as e:
@@ -165,8 +205,9 @@ def register(worker: ZeebeWorker):
         # Diese Werte erscheinen in Operate als Camunda-Prozessvariablen.
         return {
             "grpcSaved": True,
+            "totalAmount": totalAmount,
             "riskScore": risk_score,
             "riskLevel": risk_level,
             "riskReasons": risk_reasons,
-            "requiresAttention": risk_level in {"HIGH", "CRITICAL"},       
-         }
+            "requiresAttention": risk_level in {"HIGH", "CRITICAL"},
+        }
