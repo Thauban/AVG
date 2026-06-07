@@ -5,7 +5,7 @@ class InvoiceLogic:
     def __init__(self, repository):
         self.repo = repository
 
-    def validate_and_create(self, invoice_id, customer_name, total_amount, issue_date, iban, currency):
+    def validate_and_create(self, invoice_id, customer_name, total_amount, issue_date, iban, currency, positionen=None, kundennummer="", zahlungsziel=""):
         # Ist die Rechnung gültig? (kein negativer Betrag)
         if total_amount < 0:
             return None, "Betrag darf nicht negativ sein!"
@@ -26,11 +26,16 @@ class InvoiceLogic:
             "issue_date": date_to_save,
             "iban": iban,
             "currency": currency,
+            "kundennummer": kundennummer,
+            "zahlungsziel": zahlungsziel,
         }
 
         # Wir übergeben das Dictionary an das Repo, zum speichern
         new_id = self.repo.add_object(invoice_object)
-        
+
+        if new_id and positionen:
+            self.repo.save_positions(new_id, positionen)
+
         return new_id, "Erfolgreich in Schichten gespeichert."
     def get_invoice_by_id(self, invoice_id):
         """Rechnung anhand der ID abrufen."""

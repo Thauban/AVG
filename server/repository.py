@@ -31,10 +31,12 @@ class InvoiceRepository:
             with connection.cursor() as cur:
                 if invoice_id and invoice_id.strip():
                     sql = """
-                        INSERT INTO rechnung.rechnung (invoice_id, customer_name, IBAN, total_amount, currency, issue_date, erzeugt, aktualisiert)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (invoice_id) DO UPDATE 
+                        INSERT INTO rechnung.rechnung (invoice_id, customer_name, kundennummer, zahlungsziel, IBAN, total_amount, currency, issue_date, erzeugt, aktualisiert)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (invoice_id) DO UPDATE
                         SET customer_name = EXCLUDED.customer_name,
+                            kundennummer = EXCLUDED.kundennummer,
+                            zahlungsziel = EXCLUDED.zahlungsziel,
                             IBAN = EXCLUDED.IBAN,
                             total_amount = EXCLUDED.total_amount,
                             currency = EXCLUDED.currency,
@@ -42,8 +44,7 @@ class InvoiceRepository:
                             aktualisiert = EXCLUDED.aktualisiert
                         RETURNING invoice_id;
                     """
-                    # HIER NUTZEN WIR JETZT DYNAMISCH obj["iban"] UND obj["currency"]!
-                    params = (invoice_id, obj["customer_name"], obj["iban"], obj["total_amount"], obj["currency"], obj["issue_date"], jetzt, jetzt)
+                    params = (invoice_id, obj["customer_name"], obj.get("kundennummer", ""), obj.get("zahlungsziel", ""), obj["iban"], obj["total_amount"], obj["currency"], obj["issue_date"], jetzt, jetzt)
                 else:
                     sql = """
                         INSERT INTO rechnung.rechnung (customer_name, IBAN, total_amount, currency, issue_date, erzeugt, aktualisiert)
@@ -95,6 +96,28 @@ class InvoiceRepository:
                         "currency": row[5]    # NEU
                     })
         return invoices
+
+    def save_positions(self, invoice_id, positionen):
+        """Speichert die Rechnungspositionen in der Tabelle 'rechnung.rechnungsposition'."""
+        with self._get_connection() as connection:
+            with connection.cursor() as cur:
+                for i, pos in enumerate(positionen, start=1):
+                    cur.execute("""
+                        INSERT INTO rechnung.rechnungsposition
+                        (invoice_id, pos_nummer, beschreibung, menge, einheit, einzelpreis, steuer_prozent, netto, steuer_betrag, brutto)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        invoice_id,
+                        i,
+                        pos["beschreibung"],
+                        pos["menge"],
+                        pos["einheit"],
+                        pos["einzelpreis"],
+                        pos["steuer_prozent"],
+                        pos["netto"],
+                        pos["steuer_betrag"],
+                        pos["brutto"],
+                    ))
 
     def delete_object(self, data_id):
         """Löscht eine Rechnung aus der Datenbank."""

@@ -21,6 +21,21 @@ class InvoiceRouter(invoice_pb2_grpc.InvoiceServiceServicer):
         date = request.issue_date
         iban = request.iban
         currency = request.currency
+        kundennummer = request.kundennummer
+        zahlungsziel = request.zahlungsziel
+
+        positionen = []
+        for p in request.positionen:
+            positionen.append({
+                "beschreibung": p.beschreibung,
+                "menge": p.menge,
+                "einheit": p.einheit,
+                "einzelpreis": p.einzelpreis,
+                "steuer_prozent": p.steuer_prozent,
+                "netto": p.netto,
+                "steuer_betrag": p.steuer,
+                "brutto": p.brutto,
+            })
 
         # Weitergabe an Die Logik-Schicht
         new_id, message = self.logic.validate_and_create(
@@ -30,6 +45,9 @@ class InvoiceRouter(invoice_pb2_grpc.InvoiceServiceServicer):
             issue_date=date,
             iban=iban,
             currency=currency,
+            positionen=positionen,
+            kundennummer=kundennummer,
+            zahlungsziel=zahlungsziel,
         )
 
         # Wir bauen das gRPC-Antwort-Objekt (InvoiceResponse) zusammen
