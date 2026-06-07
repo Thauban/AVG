@@ -193,8 +193,36 @@ Rechnungen über den folgenden Schwellwerten werden zur manuellen Compliance-Pr�
 
 ---
 
+## Datenbank prüfen
+
+Verbindung zur PostgreSQL-Datenbank:
+```bash
+docker exec -it postgres psql -U sachbearbeiter -d rechnung
+```
+
+Nützliche SQL-Abfragen:
+
+```sql
+-- Alle gespeicherten Rechnungen anzeigen
+SELECT invoice_id, customer_name, kundennummer, zahlungsziel, total_amount, currency
+FROM rechnung.rechnung;
+
+-- Rechnungsposten einer bestimmten Rechnung anzeigen
+SELECT * FROM rechnung.rechnungsposition
+WHERE invoice_id = 'INV-...';
+
+-- Rechnungen mit allen Positionen zusammen
+SELECT r.invoice_id, r.customer_name, r.total_amount,
+       p.beschreibung, p.menge, p.einheit, p.brutto
+FROM rechnung.rechnung r
+JOIN rechnung.rechnungsposition p ON r.invoice_id = p.invoice_id;
+```
+
+Mit `\q` die psql-Shell verlassen.
+
+---
+
 ## Bekannte Einschränkungen
 
-- Rechnungen werden **im RAM gespeichert** – Daten gehen beim Neustart des gRPC-Servers verloren.
 - Der `archive_worker.py` archiviert Rechnungen als JSON-Dateien in `archive/invoices/` (lokal, nicht im Git).
 - Der Prozessstart erfolgt aktuell manuell per CLI (`start_process.py`), nicht automatisch per E-Mail.
