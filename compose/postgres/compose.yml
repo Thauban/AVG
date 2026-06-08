@@ -36,6 +36,27 @@ services:
           cpus: "0.5"
           memory: 512M
 
+  pgadmin:
+    # Weboberfläche zur Administration und Prüfung der PostgreSQL-Datenbank.
+    image: dpage/pgadmin4:latest
+    ports:
+      - published: 5050
+        target: 80
+    environment:
+      # Standardzugang für die lokale pgAdmin-Instanz.
+      PGADMIN_DEFAULT_EMAIL: admin@avg-projekt.de
+      PGADMIN_DEFAULT_PASSWORD: admin
+    volumes:
+      # Persistiert pgAdmin-Konfigurationen wie registrierte Datenbankserver.
+      - pgadmin_data:/var/lib/pgadmin
+    # Zugriff auf den PostgreSQL-Container über den Servicenamen "postgres".
+    networks: [acme-network]
+    container_name: pgadmin
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
 # /run/secrets/*
 secrets:
   db_password:
@@ -51,6 +72,9 @@ volumes:
   avg_init:
     name: avg_init
     external: true
+  # Separates Volume für pgAdmin; die PostgreSQL-Daten bleiben in avg_data.
+  pgadmin_data:
+    name: pgadmin_data
 
 networks:
   acme-network:

@@ -109,6 +109,44 @@ docker compose up
 
 Die Datenbank ist erreichbar unter `localhost:5432`.
 
+pgAdmin ist erreichbar unter:
+
+```text
+http://localhost:5050
+```
+
+Login:
+
+```text
+E-Mail: admin@avg-projekt.de
+Passwort: admin
+```
+
+Server in pgAdmin verbinden:
+
+```text
+Name: AVG PostgreSQL
+Host: postgres
+Port: 5432
+Database: rechnung
+Username: sachbearbeiter
+Password: x
+```
+
+Die Rechnungstabellen sind nach der Verbindung in pgAdmin unter folgendem Pfad erreichbar:
+
+```text
+Servers
+  AVG PostgreSQL
+    Databases
+      rechnung
+        Schemas
+          rechnung
+            Tables
+              rechnung
+              rechnungsposition
+```
+
 ---
 
 ## Nützliche psql-Befehle
