@@ -150,16 +150,17 @@ def register(worker: ZeebeWorker):
         iban_display = iban or "fehlt"
         customer_display = customerName or "fehlt"
 
-        risk_score, risk_level, risk_reasons = calculate_risk_score(totalAmount, iban, currency, customerName)
-        risk_text = "; ".join(risk_reasons)
-
         grpc_positionen = _build_positionen(positionen)
 
         # Gesamtbetrag aus Positionen berechnen falls vorhanden
         if grpc_positionen:
             totalAmount = round(sum(p.brutto for p in grpc_positionen), 2)
 
-        # Harte Validierung nach Berechnung, damit der korrekte Betrag geprueft wird.
+        # Risiko erst nach der Betragsberechnung bewerten, damit ein initialer Formularwert 0 nicht fälschlich auffällig wird.
+        risk_score, risk_level, risk_reasons = calculate_risk_score(totalAmount, iban, currency, customerName)
+        risk_text = "; ".join(risk_reasons)
+
+        # Harte Validierung nach Berechnung, damit der korrekte Betrag geprüft wird.
         validate_required_invoice_data(totalAmount, iban, currency)
 
         try:
