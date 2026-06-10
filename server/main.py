@@ -34,8 +34,10 @@ def serve():
     # Registriere deinen Router beim gRPC-System
     invoice_pb2_grpc.add_InvoiceServiceServicer_to_server(router, server)
     
-    # Port festlegen -> Daten ohne Verschlüsselung (insecure)
-    server.add_insecure_port('[::]:50051')
+    # Port explizit auf IPv4 setzen, damit der Server auf Windows zuverlässig startet.
+    # Auf manchen Windows-Setups ist IPv6 ([::]) deaktiviert, deshalb binden
+    # wir explizit auf IPv4 localhost.
+    server.add_insecure_port('127.0.0.1:50051')
     
     logger.info("gRPC Server gestartet auf Port 50051...")
     server.start()

@@ -10,10 +10,9 @@ class InvoiceLogic:
         if total_amount < 0:
             return None, "Betrag darf nicht negativ sein!"
         
-        # Ist die Rechnung schon vorhanden? (Doppelte ID)
-        existing_invoice = self.repo.get_object(invoice_id)
-        if existing_invoice:
-            return None, "Rechnung mit dieser ID existiert bereits!"
+        # Bei Korrekturen aus Camunda/n8n wird dieselbe Rechnungs-ID erneut
+        # gespeichert. Das Repository aktualisiert dann per ON CONFLICT.
+        existing_invoice = self.repo.get_object(invoice_id) if invoice_id else None
 
         # Falls kein Datum mitgegeben wurde, generieren wir eins.
         date_to_save = issue_date if issue_date else str(datetime.date.today())
@@ -36,7 +35,8 @@ class InvoiceLogic:
         if new_id and positionen:
             self.repo.save_positions(new_id, positionen)
 
-        return new_id, "Erfolgreich in Schichten gespeichert."
+        action = "aktualisiert" if existing_invoice else "gespeichert"
+        return new_id, f"Erfolgreich in Schichten {action}."
     def get_invoice_by_id(self, invoice_id):
         """Rechnung anhand der ID abrufen."""
         logger.debug(f"[Logic] Suche nach Rechnung mit ID: {invoice_id}...")

@@ -68,8 +68,3 @@ Sie werden aus der `.proto` Datei in `/shared` generiert.
 Wenn die API geändert wird, muss den Befehl für den gRPC-Compiler nochmal ausgeführt werden.
 
 Viel Erfolg beim Ausprobieren!
-
-### Anmerkung zu KI
-
-Teile des Codes wurden unter Hilfe von KI-Modellen, wie Gemini, Codex oder Claude, erstellt.
-Diese wurden für unseren Code angepasst und es wurde nur Code verwendet, von dem wir wissen, was und wie er funktioniert.

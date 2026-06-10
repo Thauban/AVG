@@ -1,0 +1,106 @@
+{
+  "name": "AVG AI Extraction to Camunda",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "source-pdf",
+              "name": "sourcePdf",
+              "value": "beispielrechnung.pdf",
+              "type": "string"
+            },
+            {
+              "id": "confidence",
+              "name": "confidence",
+              "value": 0.91,
+              "type": "number"
+            },
+            {
+              "id": "invoice",
+              "name": "invoice",
+              "value": "={{ {\n  invoiceId: 'INV-N8N-' + $now.toFormat('yyyyLLdd-HHmmss'),\n  customerName: 'Musterlieferant GmbH',\n  kundennummer: 'K-4711',\n  zahlungsziel: '2026-07-10',\n  rechnungstyp: 'dienstleistung',\n  totalAmount: 1428,\n  currency: 'EUR',\n  issueDate: '2026-06-10',\n  iban: 'DE89370400440532013000',\n  lineItems: [\n    {\n      beschreibung: 'Beratungsleistung Prozessanalyse',\n      menge: 6,\n      einheit: 'h',\n      einzelpreis: 200,\n      steuer_prozent: 19,\n      netto: 1200,\n      steuer: 228,\n      brutto: 1428\n    }\n  ]\n} }}",
+              "type": "object"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "ai-extraction-result",
+      "name": "AI Extraction Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8088/start-invoice-process",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "start-camunda-process",
+      "name": "Start Camunda Process",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        740,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Extraction Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Extraction Result": {
+      "main": [
+        [
+          {
+            "node": "Start Camunda Process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-06-10T00:00:00.000Z",
+  "versionId": "avg-ai-camunda-bridge"
+}
+

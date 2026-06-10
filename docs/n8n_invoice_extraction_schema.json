@@ -1,0 +1,27 @@
+{
+  "sourcePdf": "string",
+  "confidence": "number between 0 and 1",
+  "invoice": {
+    "invoiceId": "string",
+    "customerName": "string",
+    "kundennummer": "string",
+    "zahlungsziel": "YYYY-MM-DD or payment term text",
+    "rechnungstyp": "lieferung|dienstleistung|miete|software|sonstiges",
+    "totalAmount": "number",
+    "currency": "EUR|CHF|GBP|USD",
+    "issueDate": "YYYY-MM-DD",
+    "iban": "string",
+    "lineItems": [
+      {
+        "beschreibung": "string",
+        "menge": "number",
+        "einheit": "string",
+        "einzelpreis": "number",
+        "steuer_prozent": "number",
+        "netto": "number",
+        "steuer": "number",
+        "brutto": "number"
+      }
+    ]
+  }
+}

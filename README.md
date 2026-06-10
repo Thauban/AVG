@@ -179,6 +179,21 @@ python camunda/send_correction.py <invoiceId>
 
 ---
 
+## AI-Extraktion mit n8n
+
+Der Prozess kann Rechnungsdaten aus PDFs über einen n8n-Workflow übernehmen. n8n läuft lokal in Docker und erzeugt ein JSON mit Metadaten und Rechnungspositionen. Dieses JSON kann direkt als Camunda-Prozessvariablen verwendet werden:
+
+```bash
+cd compose/n8n
+docker compose up -d
+
+python camunda/start_process.py --json n8n/extracted_invoice.example.json --pdf-name beispielrechnung.pdf
+```
+
+Details zum JSON-Format und Ablauf stehen in `docs/ai_invoice_extraction.md`.
+
+---
+
 ## DMN – Compliance-Schwellwerte
 
 Die Compliance-Prüfung läuft automatisch per DMN-Tabelle (`compliance_check.dmn`).

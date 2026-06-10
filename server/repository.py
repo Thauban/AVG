@@ -61,9 +61,8 @@ class InvoiceRepository:
         """Liest eine spezifische Rechnung inklusive IBAN und Währung aus."""
         with self._get_connection() as connection:
             with connection.cursor() as cur:
-                # Spalten erweitert um IBAN und currency!
                 cur.execute(
-                    "SELECT invoice_id, customer_name, total_amount, issue_date, IBAN, currency FROM rechnung.rechnung WHERE invoice_id = %s;",
+                    "SELECT invoice_id, customer_name, total_amount, issue_date, IBAN, currency, kundennummer, zahlungsziel FROM rechnung.rechnung WHERE invoice_id = %s;",
                     (data_id,)
                 )
                 row = cur.fetchone()
@@ -73,8 +72,10 @@ class InvoiceRepository:
                         "customer_name": row[1],
                         "total_amount": float(row[2]),
                         "issue_date": str(row[3]),
-                        "iban": row[4],        # NEU: Wird an Logic/Router weitergereicht
-                        "currency": row[5]    # NEU: Wird an Logic/Router weitergereicht
+                        "iban": row[4],
+                        "currency": row[5],
+                        "kundennummer": row[6],
+                        "zahlungsziel": row[7],
                     }
         return None
 
@@ -83,8 +84,7 @@ class InvoiceRepository:
         invoices = []
         with self._get_connection() as connection:
             with connection.cursor() as cur:
-                # Spalten erweitert um IBAN und currency!
-                cur.execute("SELECT invoice_id, customer_name, total_amount, issue_date, IBAN, currency FROM rechnung.rechnung;")
+                cur.execute("SELECT invoice_id, customer_name, total_amount, issue_date, IBAN, currency, kundennummer, zahlungsziel FROM rechnung.rechnung;")
                 rows = cur.fetchall()
                 for row in rows:
                     invoices.append({
@@ -92,8 +92,10 @@ class InvoiceRepository:
                         "customer_name": row[1],
                         "total_amount": float(row[2]),
                         "issue_date": str(row[3]),
-                        "iban": row[4],        # NEU
-                        "currency": row[5]    # NEU
+                        "iban": row[4],
+                        "currency": row[5],
+                        "kundennummer": row[6],
+                        "zahlungsziel": row[7],
                     })
         return invoices
 
@@ -101,6 +103,7 @@ class InvoiceRepository:
         """Speichert die Rechnungspositionen in der Tabelle 'rechnung.rechnungsposition'."""
         with self._get_connection() as connection:
             with connection.cursor() as cur:
+                cur.execute("DELETE FROM rechnung.rechnungsposition WHERE invoice_id = %s;", (invoice_id,))
                 for i, pos in enumerate(positionen, start=1):
                     cur.execute("""
                         INSERT INTO rechnung.rechnungsposition

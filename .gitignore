@@ -37,6 +37,8 @@ pip-delete-this-directory.txt
 
 # Laufzeit-Artefakte
 archive/
+invoices/*.pdf
+invoices/*.PDF
 
 # KI-Kontext (lokal, nicht committen)
 GEMINI.md
