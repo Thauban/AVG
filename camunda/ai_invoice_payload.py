@@ -74,10 +74,11 @@ def normalize_ai_invoice_payload(payload: dict[str, Any], defaults: dict[str, An
         or []
     )
     line_items = [_normalize_line_item(item) for item in raw_items if isinstance(item, dict)]
+    first_item = line_items[0] if line_items else {}
 
     # Ab hier entsteht der stabile Vertrag zu Camunda: Diese Variablennamen
     # werden im BPMN-Prozess und in den Workern erwartet.
-    return {
+    camunda_payload = {
         "invoiceId": _first(
             invoice,
             "invoiceId",
@@ -106,11 +107,33 @@ def normalize_ai_invoice_payload(payload: dict[str, Any], defaults: dict[str, An
         "zahlungsziel": _first(invoice, "zahlungsziel", "paymentTerms", "dueDate", default=defaults.get("zahlungsziel", "")),
         "rechnungstyp": _first(invoice, "rechnungstyp", "invoiceType", "type", default=defaults.get("rechnungstyp", "sonstiges")),
         "lineItems": line_items,
+        "positionen": line_items,
+        "rechnungsposten": line_items,
         "inputChannel": defaults.get("inputChannel", "ai"),
         "aiExtracted": True,
         "extractionConfidence": _to_float(_first(payload, "confidence", "extractionConfidence", default=0.0)),
         "sourcePdf": _first(payload, "sourcePdf", "fileName", "filename", default=defaults.get("sourcePdf", "")),
     }
+
+    if first_item:
+        # Manche Camunda-Formulare lesen Positionswerte als einzelne Variablen.
+        # Die vollständige Liste bleibt in lineItems erhalten; diese Felder
+        # befüllen zusätzlich einfache Formularfelder für die erste Position.
+        camunda_payload.update(
+            {
+                "beschreibung": first_item["beschreibung"],
+                "menge": first_item["menge"],
+                "einheit": first_item["einheit"],
+                "einzelpreis": first_item["einzelpreis"],
+                "steuer_prozent": first_item["steuer_prozent"],
+                "netto": first_item["netto"],
+                "steuer": first_item["steuer"],
+                "brutto": first_item["brutto"],
+                "betrag": first_item["brutto"],
+            }
+        )
+
+    return camunda_payload
 
 
 def load_ai_invoice_payload(path: str | Path, defaults: dict[str, Any] | None = None) -> dict[str, Any]:

@@ -6,9 +6,11 @@ services:
       - "5678:5678"
     environment:
       N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      N8N_RESTRICT_FILE_ACCESS_TO: /files
       TZ: Europe/Berlin
     volumes:
       - n8n_data:/home/node/.n8n
+      - ../../invoices:/files
 
 volumes:
   n8n_data:
