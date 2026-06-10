@@ -11,8 +11,70 @@ import invoice_pb2
 import invoice_pb2_grpc
 from camunda.config import GRPC_SERVER
 
-# Bewertet eine Rechnung fachlich nach einfachen, nachvollziehbaren Risikoregeln.
-# Das Ergebnis stoppt den Prozess nicht automatisch, sondern wird als Prozessvariable an Camunda zurueckgegeben.
+
+def _to_float(value, default=0.0):
+    # n8n/AI liefert Zahlen je nach Modell manchmal als Text.
+    # Der Worker rechnet Positionen und Gesamtbeträge deshalb defensiv um.
+    if value in (None, ""):
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _build_positions(line_items):
+    # Aus den extrahierten lineItems werden gRPC-Positionen gebaut,
+    # damit neben Metadaten auch Rechnungspositionen gespeichert werden.
+    positions = []
+    for item in line_items or []:
+        if not isinstance(item, dict):
+            continue
+
+        beschreibung = item.get("beschreibung") or item.get("description") or ""
+        menge = _to_float(item.get("menge") or item.get("quantity"), 0.0)
+        einzelpreis = _to_float(item.get("einzelpreis") or item.get("unitPrice") or item.get("price"), 0.0)
+        steuer_prozent = _to_float(
+            item.get("steuer_prozent") or item.get("steuerProzent") or item.get("taxRate") or item.get("vatRate"),
+            19.0,
+        )
+        einheit = item.get("einheit") or item.get("unit") or "Stk."
+        netto = _to_float(item.get("netto") or item.get("netAmount"))
+        steuer = _to_float(item.get("steuer") or item.get("steuer_betrag") or item.get("taxAmount"))
+        brutto = _to_float(item.get("brutto") or item.get("grossAmount"))
+
+        if not beschreibung or menge <= 0:
+            # Unvollständige AI-Positionen werden ignoriert. So erzeugt ein
+            # einzelner schlechter Positionsvorschlag keinen Prozessabbruch.
+            continue
+
+        # Falls die AI nur Menge und Einzelpreis liefert, berechnen wir Netto,
+        # Steuer und Brutto nachvollziehbar nach.
+        if netto <= 0 and einzelpreis > 0:
+            netto = round(menge * einzelpreis, 2)
+        if steuer <= 0 and netto > 0:
+            steuer = round(netto * (steuer_prozent / 100), 2)
+        if brutto <= 0 and netto > 0:
+            brutto = round(netto + steuer, 2)
+
+        positions.append(
+            invoice_pb2.Position(
+                beschreibung=beschreibung,
+                menge=menge,
+                einheit=einheit,
+                einzelpreis=einzelpreis,
+                steuer_prozent=steuer_prozent,
+                netto=netto,
+                steuer=steuer,
+                brutto=brutto,
+            )
+        )
+    return positions
+
+
+# Bewertet die Rechnung nach einfachen Risikoregeln.
+# Die Regeln sind bewusst nachvollziehbar gehalten, damit das Ergebnis
+# im Prozess leicht erklärt werden kann.
 def calculate_risk_score(total_amount: float, iban: str = "", currency: str = "EUR", customer_name: str = ""):
     score = 0
     reasons = []
@@ -23,7 +85,7 @@ def calculate_risk_score(total_amount: float, iban: str = "", currency: str = "E
 
     allowed_currencies = {"EUR", "CHF", "GBP", "USD"}
 
-    # Betraege werden nach Hoehe bewertet: je hoeher oder unplausibler, desto hoeher das Risiko.
+    # Betrag prüfen: sehr hohe oder ungültige Beträge erhöhen das Risiko.
     if total_amount <= 0:
         score += 80
         reasons.append("Betrag ist 0 oder negativ")
@@ -32,20 +94,21 @@ def calculate_risk_score(total_amount: float, iban: str = "", currency: str = "E
         reasons.append("Sehr hoher Betrag ab 50.000")
     elif total_amount >= 10000:
         score += 50
-        reasons.append("Betrag ueber 10.000")
+        reasons.append("Betrag über 10.000")
     elif total_amount >= 5000:
         score += 25
-        reasons.append("Betrag ueber 5.000")
+        reasons.append("Betrag über 5.000")
 
-    # Waehrungen ausserhalb der erlaubten Liste werden als fachliche Auffaelligkeit markiert.
+    # Währung prüfen: nur definierte Währungen werden akzeptiert.
     if not currency_clean:
         score += 40
-        reasons.append("Waehrung fehlt")
+        reasons.append("Währung fehlt")
     elif currency_clean not in allowed_currencies:
         score += 40
-        reasons.append(f"Nicht unterstuetzte Waehrung: {currency_clean}")
+        reasons.append(f"Nicht unterstützte Währung: {currency_clean}")
 
-    # Die IBAN wird nur auf Plausibilitaet geprueft, nicht mit einer echten Bankvalidierung.
+    # IBAN prüfen: hier findet eine Plausibilitätsprüfung statt,
+    # keine vollständige Bankvalidierung.
     if not iban_clean:
         score += 50
         reasons.append("IBAN fehlt")
@@ -54,19 +117,20 @@ def calculate_risk_score(total_amount: float, iban: str = "", currency: str = "E
         reasons.append("IBAN zu kurz")
     elif not iban_clean[:2].isalpha() or not iban_clean[2:4].isdigit():
         score += 40
-        reasons.append("IBAN Format ungueltig")
+        reasons.append("IBAN Format ungültig")
     elif not iban_clean.startswith("DE"):
         score += 20
         reasons.append("Auslands-IBAN")
 
-    # Platzhalter-Kundennamen helfen dabei, Test- oder Dummy-Daten in der Demo sichtbar zu machen.
+    # Kundennamen prüfen: Platzhalter wie Test oder Dummy gelten als auffällig.
     if not customer_clean:
         score += 30
         reasons.append("Kundenname fehlt")
     elif any(word in customer_clean.lower() for word in ["test", "dummy", "unknown", "unbekannt"]):
         score += 20
-        reasons.append("Auffaelliger Kundenname")
+        reasons.append("Auffälliger Kundenname")
 
+    # Aus dem berechneten Score wird eine verständliche Risikostufe gebildet.
     if score >= 80:
         level = "CRITICAL"
     elif score >= 60:
@@ -75,28 +139,28 @@ def calculate_risk_score(total_amount: float, iban: str = "", currency: str = "E
         level = "MEDIUM"
     else:
         level = "LOW"
-
+    # Falls keine Regel angeschlagen hat, gilt die Rechnung als unauffällig.
     if not reasons:
-        reasons.append("Keine Auffaelligkeiten")
+        reasons.append("Keine Auffälligkeiten")
 
+    # Rückgabe an Camunda:
+    # Diese Werte sind später in Operate als Prozessvariablen sichtbar.
     return score, level, reasons
 
 
-# Prueft Pflichtdaten, ohne die der Prozess nicht sinnvoll weiterlaufen darf.
-# Bei Fehlern wird eine Exception geworfen; Camunda erzeugt daraus einen Incident am Service Task.
 def validate_required_invoice_data(total_amount: float, iban: str = "", currency: str = "EUR"):
     currency_clean = (currency or "").upper().strip()
     iban_clean = (iban or "").replace(" ", "").upper()
     allowed_currencies = {"EUR", "CHF", "GBP", "USD"}
 
     if total_amount <= 0:
-        raise Exception("Validierungsfehler: Betrag muss groesser als 0 sein.")
+        raise Exception("Validierungsfehler: Betrag muss größer als 0 sein.")
 
     if not currency_clean:
-        raise Exception("Validierungsfehler: Waehrung fehlt. Erlaubt sind EUR, CHF, GBP und USD.")
+        raise Exception("Validierungsfehler: Währung fehlt. Erlaubt sind EUR, CHF, GBP und USD.")
 
     if currency_clean not in allowed_currencies:
-        raise Exception(f"Validierungsfehler: Waehrung '{currency_clean}' wird nicht unterstuetzt.")
+        raise Exception(f"Validierungsfehler: Währung '{currency_clean}' wird nicht unterstützt.")
 
     if not iban_clean:
         raise Exception("Validierungsfehler: IBAN fehlt.")
@@ -105,66 +169,47 @@ def validate_required_invoice_data(total_amount: float, iban: str = "", currency
         raise Exception("Validierungsfehler: IBAN ist zu kurz.")
 
     if not iban_clean[:2].isalpha() or not iban_clean[2:4].isdigit():
-        raise Exception("Validierungsfehler: IBAN-Format ist ungueltig.")
-
-
-def _build_positionen(raw):
-    positionen = []
-    for r in raw:
-        beschreibung = r.get("beschreibung", "")
-        menge = float(r.get("menge", 0) or 0)
-        einzelpreis = float(r.get("einzelpreis", 0) or 0)
-        steuer_prozent = float(r.get("steuerProzent", 19) or 19)
-        einheit = r.get("einheit", "Stk.") or "Stk."
-
-        if not beschreibung or menge <= 0 or einzelpreis <= 0:
-            continue
-
-        netto = round(menge * einzelpreis, 2)
-        steuer = round(netto * (steuer_prozent / 100), 2)
-        brutto = round(netto + steuer, 2)
-
-        positionen.append(invoice_pb2.Position(
-            beschreibung=beschreibung,
-            menge=menge,
-            einheit=einheit,
-            einzelpreis=einzelpreis,
-            steuer_prozent=steuer_prozent,
-            netto=netto,
-            steuer=steuer,
-            brutto=brutto,
-        ))
-    return positionen
+        raise Exception("Validierungsfehler: IBAN-Format ist ungültig.")
 
 
 def register(worker: ZeebeWorker):
 
     @worker.task(task_type="register-or-update-invoice-grpc")
-    async def handle(invoiceId: str, customerName: str, totalAmount: float, issueDate: str,
-                     iban: str = "", currency: str = "EUR",
-                     positionen: list = [], kundennummer: str = "", zahlungsziel: str = ""):
+    async def handle(
+        invoiceId: str,
+        customerName: str,
+        totalAmount: float,
+        issueDate: str,
+        iban: str = "",
+        currency: str = "EUR",
+        kundennummer: str = "",
+        zahlungsziel: str = "",
+        lineItems: list | None = None,
+        positionen: list | None = None,
+        aiExtracted: bool = False,
+        extractionConfidence: float = 0.0,
+    ):
         if not invoiceId or not customerName:
             raise Exception("Pflichtfelder fehlen: invoiceId oder customerName ist leer.")
 
-        currency_display = currency or "fehlt"
-        iban_display = iban or "fehlt"
-        customer_display = customerName or "fehlt"
+        grpc_positionen = _build_positions(lineItems or positionen)
 
-        grpc_positionen = _build_positionen(positionen)
-
-        # Gesamtbetrag aus Positionen berechnen falls vorhanden
         if grpc_positionen:
+            # Wenn Positionen vorhanden sind, ist deren Summe die zuverlässigere
+            # Quelle für den Gesamtbetrag als ein eventuell leerer Formularwert.
             totalAmount = round(sum(p.brutto for p in grpc_positionen), 2)
 
-        # Risiko erst nach der Betragsberechnung bewerten, damit ein initialer Formularwert 0 nicht fälschlich auffällig wird.
+        # Risiko und Pflichtfeldvalidierung laufen nach der Positionsberechnung,
+        # damit AI-Daten und manuelle Korrekturen gleich behandelt werden.
         risk_score, risk_level, risk_reasons = calculate_risk_score(totalAmount, iban, currency, customerName)
-        risk_text = "; ".join(risk_reasons)
-
-        # Harte Validierung nach Berechnung, damit der korrekte Betrag geprüft wird.
         validate_required_invoice_data(totalAmount, iban, currency)
 
+        logger.info(f"[gRPC Worker] Speichere Rechnung: {invoiceId} | IBAN: {iban} | Währung: {currency}")
+        if aiExtracted:
+            # In den Logs wird sichtbar, dass die Daten aus der n8n-Extraktion kamen.
+            logger.info("[gRPC Worker] AI-Extraktion erkannt | Confidence: {}", extractionConfidence)
+
         try:
-            # Uebergibt die Rechnungsmetadaten an den lokalen gRPC-Server.
             with grpc.insecure_channel(GRPC_SERVER) as channel:
                 stub = invoice_pb2_grpc.InvoiceServiceStub(channel)
                 request = invoice_pb2.InvoiceRequest(
@@ -174,10 +219,12 @@ def register(worker: ZeebeWorker):
                     issue_date=issueDate,
                     iban=iban,
                     currency=currency,
-                    positionen=grpc_positionen,
                     kundennummer=kundennummer,
                     zahlungsziel=zahlungsziel,
                 )
+                # Übergabe der von n8n/Gemini extrahierten Rechnungspositionen
+                # an den bestehenden gRPC-Server.
+                request.positionen.extend(grpc_positionen)
                 response = stub.SaveMetadata(request)
         except grpc.RpcError as e:
             raise Exception(f"gRPC Server nicht erreichbar: {e.details()}")
@@ -186,24 +233,18 @@ def register(worker: ZeebeWorker):
             raise Exception(f"gRPC Fehler: {response.message}")
 
         if risk_level == "LOW":
-            logger.success(
-                "[OK] Rechnung {} gespeichert | Risiko: LOW | Kein Fehler gefunden",
-                invoiceId,
-            )
+            logger.success("[OK] Rechnung {} gespeichert | Risiko: LOW | Kein Fehler gefunden", invoiceId)
         else:
             logger.warning(
-                "[PRUEFUNG] Rechnung {} gespeichert | Risiko: {} ({}) | Fehler: {} | Daten: Betrag={:.2f}, Waehrung={}, IBAN={}, Kunde={}",
+                "[PRÜFUNG] Rechnung {} gespeichert | Risiko: {} ({}) | Fehler: {}",
                 invoiceId,
                 risk_level,
                 risk_score,
-                risk_text,
-                totalAmount,
-                currency_display,
-                iban_display,
-                customer_display,
+                "; ".join(risk_reasons),
             )
 
-        # Diese Werte erscheinen in Operate als Camunda-Prozessvariablen.
+        # Rückgabe an Camunda:
+        # Diese Werte sind später in Operate als Prozessvariablen sichtbar.
         return {
             "grpcSaved": True,
             "totalAmount": totalAmount,

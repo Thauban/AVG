@@ -1,5 +1,11 @@
-# Startet eine neue Prozessinstanz in Camunda.
-# Ausführen: python camunda/start_process.py
+"""Startet eine neue Prozessinstanz in Camunda.
+
+Ausführen:
+  python camunda/start_process.py
+  python camunda/start_process.py INV-1 1200 EUR "Muster GmbH" DE89370400440532013000 mail
+  python camunda/start_process.py --json n8n/extracted_invoice.example.json
+"""
+import argparse
 import asyncio
 import sys
 import os
@@ -16,45 +22,63 @@ from camunda.config import (
     CAMUNDA_CLUSTER_ID,
     CAMUNDA_REGION,
 )
+from camunda.ai_invoice_payload import load_ai_invoice_payload
 
 PROCESS_ID = "Process_Soll_P2P_Sprint3_Improved"
 
-now           = datetime.now()
-timestamp     = now.strftime("%Y%m%d-%H%M%S")
-invoice_id    = sys.argv[1] if len(sys.argv) > 1 else f"INV-{timestamp}"
-total_amount  = float(sys.argv[2]) if len(sys.argv) > 2 else 0.0
-currency      = sys.argv[3] if len(sys.argv) > 3 else "EUR"
-customer_name = sys.argv[4] if len(sys.argv) > 4 else "Max Mustermann GmbH"
-iban          = sys.argv[5] if len(sys.argv) > 5 else "DE89370400440532013000"
-input_channel = sys.argv[6] if len(sys.argv) > 6 else "mail"
 
-TEST_INVOICE = {
-    "invoiceId": invoice_id,
-    "customerName": customer_name,
-    "totalAmount": 0.0,
-    "issueDate": now.strftime("%Y-%m-%d"),
-    "iban": iban,
-    "currency": currency,
-    "inputChannel": input_channel,
-    "kundennummer": "KD-001",
-    "zahlungsziel": "14 Tage netto",
-    "positionen": [
-        {
-            "beschreibung": "Laptop Dell XPS 15",
-            "menge": 2,
-            "einheit": "Stk.",
-            "einzelpreis": 1200.00,
-            "steuerProzent": 19,
-        },
-        {
-            "beschreibung": "Maus Logitech MX",
-            "menge": 5,
-            "einheit": "Stk.",
-            "einzelpreis": 80.00,
-            "steuerProzent": 19,
-        },
-    ],
-}
+def build_process_variables():
+    now = datetime.now()
+    timestamp = now.strftime("%Y%m%d-%H%M%S")
+
+    parser = argparse.ArgumentParser(description="Startet den Camunda-Rechnungsprozess.")
+    parser.add_argument("invoice_id", nargs="?", default=f"INV-{timestamp}")
+    parser.add_argument("total_amount", nargs="?", type=float, default=0.0)
+    parser.add_argument("currency", nargs="?", default="EUR")
+    parser.add_argument("customer_name", nargs="?", default="Max Mustermann GmbH")
+    parser.add_argument("iban", nargs="?", default="DE89370400440532013000")
+    parser.add_argument("input_channel", nargs="?", default="mail")
+    parser.add_argument("--json", dest="ai_json", help="JSON-Datei mit n8n/AI-Extraktionsergebnis.")
+    parser.add_argument("--pdf-name", default="", help="Name der extrahierten Rechnungs-PDF.")
+    args = parser.parse_args()
+
+    defaults = {
+        "invoiceId": args.invoice_id,
+        "customerName": args.customer_name,
+        "totalAmount": args.total_amount,
+        "issueDate": now.strftime("%Y-%m-%d"),
+        "iban": args.iban,
+        "currency": args.currency,
+        "inputChannel": args.input_channel,
+        "sourcePdf": args.pdf_name,
+        "kundennummer": "KD-001",
+        "zahlungsziel": "14 Tage netto",
+        "rechnungstyp": "lieferung",
+        "positionen": [
+            {
+                "beschreibung": "Laptop Dell XPS 15",
+                "menge": 2,
+                "einheit": "Stk.",
+                "einzelpreis": 1200.00,
+                "steuerProzent": 19,
+            },
+            {
+                "beschreibung": "Maus Logitech MX",
+                "menge": 5,
+                "einheit": "Stk.",
+                "einzelpreis": 80.00,
+                "steuerProzent": 19,
+            },
+        ],
+    }
+
+    if args.ai_json:
+        variables = load_ai_invoice_payload(args.ai_json, defaults)
+        if not variables["invoiceId"]:
+            variables["invoiceId"] = f"INV-{timestamp}"
+        return variables
+
+    return defaults
 
 
 async def main():
@@ -66,12 +90,15 @@ async def main():
     )
 
     client = ZeebeClient(channel)
+    process_variables = build_process_variables()
 
-    logger.info(f"Starte Prozess '{PROCESS_ID}' mit Rechnung: {TEST_INVOICE['invoiceId']}")
+    logger.info(f"Starte Prozess '{PROCESS_ID}' mit Rechnung: {process_variables['invoiceId']}")
+    if process_variables.get("aiExtracted"):
+        logger.info("AI-Extraktion geladen: {}", process_variables.get("sourcePdf") or "JSON-Payload")
 
     instance = await client.run_process(
         bpmn_process_id=PROCESS_ID,
-        variables=TEST_INVOICE,
+        variables=process_variables,
     )
 
     logger.success(f"Prozess gestartet! Instanz-ID: {instance.process_instance_key}")

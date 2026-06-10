@@ -16,7 +16,7 @@ def register(worker: ZeebeWorker):
         # Der Ordner wird zur Laufzeit erstellt und ist per .gitignore vom Commit ausgeschlossen.
         ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Archivdaten als einfache JSON-Struktur fuer Demo und Nachvollziehbarkeit.
+        # Archivdaten als einfache JSON-Struktur für Nachvollziehbarkeit.
         archive_data = {
             "invoiceId": invoiceId,
             "customerName": customerName,
@@ -38,7 +38,7 @@ def register(worker: ZeebeWorker):
             archive_file,
         )
 
-        # Rueckgabe an Camunda: Der Dateipfad ist spaeter in Operate als Prozessvariable sichtbar.
+        # Rückgabe an Camunda: Der Dateipfad ist später in Operate als Prozessvariable sichtbar.
         return {
             "archived": True,
             "archiveFile": str(archive_file),

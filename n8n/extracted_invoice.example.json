@@ -1,0 +1,27 @@
+{
+  "sourcePdf": "beispielrechnung.pdf",
+  "confidence": 0.91,
+  "invoice": {
+    "invoiceId": "INV-AI-2026-001",
+    "customerName": "Musterlieferant GmbH",
+    "kundennummer": "K-4711",
+    "zahlungsziel": "2026-07-10",
+    "rechnungstyp": "dienstleistung",
+    "totalAmount": 1428.0,
+    "currency": "EUR",
+    "issueDate": "2026-06-10",
+    "iban": "DE89370400440532013000",
+    "lineItems": [
+      {
+        "beschreibung": "Beratungsleistung Prozessanalyse",
+        "menge": 6,
+        "einheit": "h",
+        "einzelpreis": 200.0,
+        "steuer_prozent": 19,
+        "netto": 1200.0,
+        "steuer": 228.0,
+        "brutto": 1428.0
+      }
+    ]
+  }
+}
