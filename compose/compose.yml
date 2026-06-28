@@ -1,0 +1,4 @@
+include:
+  - path: ./postgres/compose.yml
+  - path: ./n8n/compose.yml
+  - path: ./Zahlungssystem/compose.yml
