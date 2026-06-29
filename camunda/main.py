@@ -16,7 +16,7 @@ from camunda.config import (
     CAMUNDA_CLUSTER_ID,
     CAMUNDA_REGION,
 )
-from camunda.workers import archive_worker, grpc_worker, payment_worker
+from camunda.workers import ai_extract_worker, archive_worker, grpc_worker, payment_worker
 
 
 async def main():
@@ -31,6 +31,7 @@ async def main():
 
     worker = ZeebeWorker(channel)
 
+    ai_extract_worker.register(worker)
     grpc_worker.register(worker)
     payment_worker.register(worker)
     archive_worker.register(worker)

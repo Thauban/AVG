@@ -32,6 +32,31 @@ HOST = "127.0.0.1"
 PORT = 8088
 
 
+async def start_camunda_process_with_email(email_payload: dict):
+    variables = {
+        "inputChannel": "ai",
+        "emailData": email_payload,
+    }
+    channel = create_camunda_cloud_channel(
+        client_id=CAMUNDA_CLIENT_ID,
+        client_secret=CAMUNDA_CLIENT_SECRET,
+        cluster_id=CAMUNDA_CLUSTER_ID,
+        region=CAMUNDA_REGION,
+    )
+    try:
+        client = ZeebeClient(channel)
+        instance = await client.run_process(
+            bpmn_process_id=PROCESS_ID,
+            variables=variables,
+        )
+        return {
+            "success": True,
+            "processInstanceKey": instance.process_instance_key,
+        }
+    finally:
+        await channel.close()
+
+
 async def start_camunda_process(payload):
     # n8n sendet den AI-Output als JSON. Vor dem Prozessstart wird dieses JSON
     # auf die Camunda-Variablen normalisiert, damit BPMN und Worker stabile
@@ -86,6 +111,19 @@ class CamundaStartHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         # n8n ruft genau diesen Endpoint auf. Andere POST-Pfade werden
         # bewusst abgelehnt, damit die Bridge klein und nachvollziehbar bleibt.
+        if self.path == "/start-with-email-data":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(content_length).decode("utf-8")
+                payload = json.loads(body) if body else {}
+                result = asyncio.run(start_camunda_process_with_email(payload))
+                logger.success("Camunda-Prozess mit E-Mail-Daten gestartet | Instanz: {}", result["processInstanceKey"])
+                self._send_json(200, result)
+            except Exception as error:
+                logger.exception("Fehler beim Starten mit E-Mail-Daten")
+                self._send_json(500, {"success": False, "message": str(error)})
+            return
+
         if self.path != "/start-invoice-process":
             self._send_json(404, {"success": False, "message": "Unbekannter Pfad"})
             return

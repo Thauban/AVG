@@ -1,0 +1,101 @@
+{
+  "name": "AVG Sprint 6 – Rechnungsextraktion via Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-extract",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-700, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\n\n// n8n Webhook v2 kann body direkt in item.json oder in item.json.body legen\nconst data = (item.json && item.json.pdfContent) ? item.json\n           : (item.json && item.json.body && item.json.body.pdfContent) ? item.json.body\n           : item.json;\n\n// Wenn base64 pdfContent von ai_extract_worker kommt\nif (data.pdfContent) {\n  const base64 = data.pdfContent;\n  const name = data.pdfName || 'rechnung.pdf';\n  const binaryData = await this.helpers.prepareBinaryData(\n    Buffer.from(base64, 'base64'),\n    name,\n    'application/pdf'\n  );\n  return [{\n    json: {\n      emailFrom: data.emailFrom || '',\n      emailSubject: data.emailSubject || ''\n    },\n    binary: { data: binaryData }\n  }];\n}\n\n// Wenn direkt ein PDF binary reinkommt (curl Test)\nconst binaryKeys = Object.keys(item.binary || {});\nif (binaryKeys.length > 0) {\n  return [{\n    json: { emailFrom: '', emailSubject: '' },\n    binary: { data: item.binary[binaryKeys[0]] }\n  }];\n}\n\n// Debug: was haben wir bekommen?\nthrow new Error('Kein PDF gefunden. Empfangene Keys: ' + JSON.stringify(Object.keys(data || {})));"
+      },
+      "id": "prepare-binary",
+      "name": "PDF vorbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-460, 300]
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "id"
+        },
+        "text": "You are an invoice data extraction system. Extract all invoice data from the provided PDF and return ONLY a valid JSON object, no explanation, no markdown, no code blocks.\nThe JSON must have exactly this structure:\n{\n  \"vendor\": \"company name of the invoice sender\",\n  \"invoiceName\": \"invoice number or ID\",\n  \"invoiceDate\": \"YYYY-MM-DD\",\n  \"customerNumber\": \"customer number (Kundennummer)\",\n  \"vendorNumber\": \"vendor VAT id (USt-IdNr) or null\",\n  \"amount\": 123.45,\n  \"currency\": \"EUR\",\n  \"dueDate\": \"YYYY-MM-DD\",\n  \"iban\": \"IBAN without spaces\",\n  \"confidence\": 0.95,\n  \"lineItems\": [\n    {\n      \"description\": \"item description\",\n      \"quantity\": 1,\n      \"unit\": \"unit of measure\",\n      \"unitPrice\": 123.45,\n      \"taxRate\": 19,\n      \"totalPrice\": 123.45\n    }\n  ]\n}\nRules:\n- vendor is the company that ISSUED the invoice (Lieferant), NOT the recipient\n- amount is the total gross invoice amount as a number\n- iban must contain no spaces\n- Return ONLY the JSON, nothing else",
+        "inputType": "binary",
+        "options": {}
+      },
+      "id": "gemini-analyze",
+      "name": "Gemini – Rechnung analysieren",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [-220, 300],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "pqXzmJ9tTdiJPlA4",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.content?.parts?.[0]?.text\n         || $input.first().json.text\n         || JSON.stringify($input.first().json);\n\nlet parsed;\ntry {\n  const cleaned = raw.replace(/```json|```/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  return [{\n    json: {\n      extractionSuccess: false,\n      error: 'JSON parse failed: ' + e.message,\n      rawOutput: raw,\n      needsManualReview: true\n    }\n  }];\n}\n\n// Plausibilitätsprüfung\nlet lineItemsSum = 0;\nif (parsed.lineItems && parsed.lineItems.length > 0) {\n  lineItemsSum = parsed.lineItems.reduce((acc, item) => acc + (item.totalPrice || 0), 0);\n}\nconst amountMatches = parsed.amount\n  ? Math.abs(lineItemsSum - parsed.amount) < 0.10\n  : true;\n\nconst requiredFields = ['vendor', 'amount', 'dueDate', 'invoiceName'];\nconst missingFields = requiredFields.filter(\n  f => parsed[f] === null || parsed[f] === undefined || parsed[f] === ''\n);\nconst isComplete = missingFields.length === 0;\nconst confidence = parsed.confidence || 0;\nconst needsManualReview = !isComplete || confidence < 0.85 || !amountMatches;\n\n// Auf Camunda-Format mappen\nconst lineItems = (parsed.lineItems || []).map(item => ({\n  beschreibung: item.description || null,\n  menge:        item.quantity    || null,\n  einheit:      item.unit        || null,\n  einzelpreis:  item.unitPrice   || null,\n  steuer_prozent: item.taxRate   || 19,\n  netto:        item.totalPrice  || null,\n  steuer:       item.totalPrice ? Math.round(item.totalPrice * (item.taxRate || 19) / 100 * 100) / 100 : null,\n  brutto:       item.totalPrice ? Math.round(item.totalPrice * (1 + (item.taxRate || 19) / 100) * 100) / 100 : null,\n}));\n\nconst firstItem = lineItems[0] || {};\n\nreturn [{\n  json: {\n    extractionSuccess: true,\n    needsManualReview,\n    isComplete,\n    missingFields,\n    confidence,\n    plausibilityCheck: {\n      lineItemsSum: Math.round(lineItemsSum * 100) / 100,\n      amountFromInvoice: parsed.amount,\n      matches: amountMatches\n    },\n    inputChannel: 'ai',\n    aiExtracted: true,\n    extractionConfidence: confidence,\n    customerName:  parsed.vendor          || 'Unbekannter Lieferant',\n    invoiceId:     parsed.invoiceName     || null,\n    issueDate:     parsed.invoiceDate     || null,\n    zahlungsziel:  parsed.dueDate         || null,\n    kundennummer:  parsed.customerNumber  || null,\n    iban:          parsed.iban            || null,\n    totalAmount:   parsed.amount          || 0,\n    currency:      parsed.currency        || 'EUR',\n    rechnungstyp:  'sonstiges',\n    lineItems,\n    positionen: lineItems,\n    beschreibung:   firstItem.beschreibung   || null,\n    menge:          firstItem.menge          || null,\n    einheit:        firstItem.einheit        || null,\n    einzelpreis:    firstItem.einzelpreis    || null,\n    steuer_prozent: firstItem.steuer_prozent || 19,\n    netto:          firstItem.netto          || null,\n    steuer:         firstItem.steuer         || null,\n    brutto:         firstItem.brutto         || null,\n    betrag:         firstItem.brutto         || null,\n  }\n}];"
+      },
+      "id": "code-cleanup",
+      "name": "JSON Cleanup & Mapping",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [20, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "webhook-respond",
+      "name": "Webhook Antwort",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [260, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "PDF vorbereiten", "type": "main", "index": 0 }]
+      ]
+    },
+    "PDF vorbereiten": {
+      "main": [
+        [{ "node": "Gemini – Rechnung analysieren", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gemini – Rechnung analysieren": {
+      "main": [
+        [{ "node": "JSON Cleanup & Mapping", "type": "main", "index": 0 }]
+      ]
+    },
+    "JSON Cleanup & Mapping": {
+      "main": [
+        [{ "node": "Webhook Antwort", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

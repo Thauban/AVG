@@ -1,0 +1,110 @@
+{
+  "name": "AVG Sprint 6 – Rechnungsextraktion mit KI",
+  "nodes": [
+    {
+      "parameters": {
+        "mailServer": {
+          "host": "imap.gmail.com",
+          "port": 993,
+          "tls": true
+        },
+        "loginName": "projektdvg@gmail.com",
+        "password": "xuzq jaip xevy vaod",
+        "format": "resolved",
+        "downloadAttachments": true,
+        "options": {}
+      },
+      "id": "email-trigger",
+      "name": "Email Eingang (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst binaryKeys = Object.keys(item.binary || {});\n\nconst pdfKey = binaryKeys.find(k => {\n  const b = item.binary[k];\n  return (b.mimeType || '').includes('pdf') || (b.fileName || '').toLowerCase().endsWith('.pdf');\n}) || binaryKeys[0];\n\nif (!pdfKey) {\n  throw new Error('Kein PDF-Anhang in der Mail gefunden.');\n}\n\nreturn [{\n  json: { emailFrom: item.json.from, emailSubject: item.json.subject },\n  binary: { data: item.binary[pdfKey] }\n}];"
+      },
+      "id": "select-pdf",
+      "name": "PDF Anhang auswählen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "id"
+        },
+        "text": "Extrahiere alle Rechnungsdaten aus der PDF und antworte ausschließlich mit gültigem JSON ohne Markdown und ohne Erklärung. Wichtig: customerName ist der Name des LIEFERANTEN (die Firma die die Rechnung ausstellt, z.B. TechConsult GmbH), NICHT der Empfänger. Felder: sourcePdf (Dateiname), confidence (0-1), invoice mit invoiceId (Rechnungsnummer), customerName (Name des Lieferanten/Absenders), kundennummer (Kundennummer des Empfängers), zahlungsziel (z.B. 30 Tage netto), rechnungstyp (dienstleistung/lieferung/software/sonstiges), totalAmount (Gesamtbruttobetrag als Zahl), currency (EUR), issueDate (Rechnungsdatum TT.MM.JJJJ), iban (IBAN des Lieferanten), lineItems (Array mit beschreibung, menge, einheit, einzelpreis, steuer_prozent, netto, steuer, brutto als Zahlen).",
+        "inputType": "binary",
+        "options": {}
+      },
+      "id": "gemini-node",
+      "name": "Gemini – Rechnung analysieren",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [720, 300],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "pqXzmJ9tTdiJPlA4",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw =\n  $json?.content?.parts?.[0]?.text ||\n  $json?.candidates?.[0]?.content?.parts?.[0]?.text ||\n  $json?.text ||\n  $json?.output ||\n  '';\n\nif (!raw) {\n  return [{ json: { error: 'Keine Antwort von Gemini', rawResponse: JSON.stringify($json).substring(0, 400) } }];\n}\n\nlet cleaned = raw\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```\\s*/i, '')\n  .replace(/```\\s*$/i, '')\n  .trim();\n\nconst firstBrace = cleaned.indexOf('{');\nconst lastBrace = cleaned.lastIndexOf('}');\n\nif (firstBrace === -1 || lastBrace === -1) {\n  return [{ json: { error: 'Kein JSON in KI-Antwort', raw: cleaned.substring(0, 400) } }];\n}\n\ncleaned = cleaned.slice(firstBrace, lastBrace + 1);\ncleaned = cleaned.replace(/,(\\s*[}\\]])/g, '$1');\n\ntry {\n  const parsed = JSON.parse(cleaned);\n  return [{ json: parsed }];\n} catch (e) {\n  return [{ json: { error: 'JSON Parse Fehler: ' + e.message, raw: cleaned.substring(0, 400) } }];\n}"
+      },
+      "id": "json-cleanup",
+      "name": "JSON Cleanup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8088/start-invoice-process",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "camunda-start",
+      "name": "Camunda Prozess starten",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300]
+    }
+  ],
+  "connections": {
+    "Email Eingang (IMAP)": {
+      "main": [
+        [{ "node": "PDF Anhang auswählen", "type": "main", "index": 0 }]
+      ]
+    },
+    "PDF Anhang auswählen": {
+      "main": [
+        [{ "node": "Gemini – Rechnung analysieren", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gemini – Rechnung analysieren": {
+      "main": [
+        [{ "node": "JSON Cleanup", "type": "main", "index": 0 }]
+      ]
+    },
+    "JSON Cleanup": {
+      "main": [
+        [{ "node": "Camunda Prozess starten", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

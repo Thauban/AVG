@@ -20,6 +20,8 @@
         <bpmn:flowNodeRef>Task_PrepareComplianceDecision</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_RegisterOrUpdateInvoice_gRPC</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_ExtractData_Manual</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_AIExtractInvoice</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ReviewAIExtraction</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_UpdateInvoiceData</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_ReceiveCorrection</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_RequestMissingInformation</bpmn:flowNodeRef>
@@ -62,6 +64,7 @@
       <bpmn:incoming>Flow_0zlsez0</bpmn:incoming>
       <bpmn:outgoing>Flow_InputChannel_EDI</bpmn:outgoing>
       <bpmn:outgoing>Flow_InputChannel_MailPortal</bpmn:outgoing>
+      <bpmn:outgoing>Flow_InputChannel_AI</bpmn:outgoing>
     </bpmn:exclusiveGateway>
     <bpmn:endEvent id="EndEvent_Rejected" name="Rechnung abgelehnt">
       <bpmn:incoming>Flow_ManualDecision_Reject</bpmn:incoming>
@@ -129,6 +132,7 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_EDI_Register</bpmn:incoming>
       <bpmn:incoming>Flow_ManualExtract_Register</bpmn:incoming>
+      <bpmn:incoming>Flow_AIReview_Register</bpmn:incoming>
       <bpmn:outgoing>Flow_Register_PrepareCompliance</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:userTask id="Task_ExtractData_Manual" name="Rechnungsdaten manuell erfassen">
@@ -139,6 +143,22 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_InputChannel_MailPortal</bpmn:incoming>
       <bpmn:outgoing>Flow_ManualExtract_Register</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_AIExtractInvoice" name="KI-Extraktion (n8n Webhook)">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="ai-extract-invoice" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_InputChannel_MailPortal</bpmn:incoming>
+      <bpmn:outgoing>Flow_AIExtract_Review</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Task_ReviewAIExtraction" name="KI-Extraktion prüfen und korrigieren">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="sachbearbeitung" />
+        <zeebe:userTask />
+        <zeebe:formDefinition formId="erfassung-der-rechnungsdaten" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_AIExtract_Review</bpmn:incoming>
+      <bpmn:outgoing>Flow_AIReview_Register</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:userTask id="Task_ManualComplianceCheck" name="Compliance-Check manuell durchführen">
       <bpmn:extensionElements>
@@ -189,11 +209,12 @@
         <zeebe:properties>
           <zeebe:property name="inbound.type" value="io.camunda:connector-email-inbound:1" />
           <zeebe:property name="authentication.type" value="simple" />
-          <zeebe:property name="authentication.username" />
-          <zeebe:property name="authentication.password" />
-          <zeebe:property name="data.imapConfig.imapHost" />
+          <zeebe:property name="authentication.username" value="projektdvg@gmail.com" />
+          <zeebe:property name="authentication.password" value="xuzqjaipxevyvaod" />
+          <zeebe:property name="data.imapConfig.imapHost" value="imap.gmail.com" />
           <zeebe:property name="data.imapConfig.imapPort" value="993" />
           <zeebe:property name="data.imapConfig.imapCryptographicProtocol" value="TLS" />
+          <zeebe:property name="data.folderToListen" value="INBOX" />
           <zeebe:property name="data.pollingWaitTime" value="PT20S" />
           <zeebe:property name="data.pollingConfigDiscriminator" value="unseenPollingConfig" />
           <zeebe:property name="data.pollingConfig.handlingStrategy" value="READ" />
@@ -201,8 +222,8 @@
           <zeebe:property name="correlationRequired" value="notRequired" />
           <zeebe:property name="deduplicationModeManualFlag" value="false" />
           <zeebe:property name="deduplicationMode" value="AUTO" />
-          <zeebe:property name="resultVariable" />
-          <zeebe:property name="resultExpression" />
+          <zeebe:property name="resultVariable" value="emailData" />
+          <zeebe:property name="resultExpression" value="={&quot;inputChannel&quot;:&quot;ai&quot;}" />
         </zeebe:properties>
       </bpmn:extensionElements>
       <bpmn:outgoing>Flow_Start_InputChannel</bpmn:outgoing>
@@ -244,7 +265,7 @@
     <bpmn:sequenceFlow id="Flow_EDI_Register" sourceRef="Task_ImportEDIInvoice" targetRef="Task_RegisterOrUpdateInvoice_gRPC" />
     <bpmn:sequenceFlow id="Flow_Start_InputChannel" sourceRef="StartEvent_InvoiceReceived" targetRef="Gateway_InputChannel" />
     <bpmn:sequenceFlow id="Flow_0zlsez0" sourceRef="Event_0kbkuyz" targetRef="Gateway_InputChannel" />
-    <bpmn:sequenceFlow id="Flow_InputChannel_MailPortal" name="Portal / Mail" sourceRef="Gateway_InputChannel" targetRef="Task_ExtractData_Manual">
+    <bpmn:sequenceFlow id="Flow_InputChannel_MailPortal" name="Email / Portal" sourceRef="Gateway_InputChannel" targetRef="Task_AIExtractInvoice">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= inputChannel != "edi"</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_ManualDecision_Reject" name="Ablehnen" sourceRef="Gateway_ManualDecision" targetRef="EndEvent_Rejected">
@@ -265,6 +286,8 @@
     <bpmn:sequenceFlow id="Flow_PrepareCompliance_DMN" sourceRef="Task_PrepareComplianceDecision" targetRef="Task_CheckComplianceNeed" />
     <bpmn:sequenceFlow id="Flow_Register_PrepareCompliance" sourceRef="Task_RegisterOrUpdateInvoice_gRPC" targetRef="Task_PrepareComplianceDecision" />
     <bpmn:sequenceFlow id="Flow_ManualExtract_Register" sourceRef="Task_ExtractData_Manual" targetRef="Task_RegisterOrUpdateInvoice_gRPC" />
+    <bpmn:sequenceFlow id="Flow_AIExtract_Review" sourceRef="Task_AIExtractInvoice" targetRef="Task_ReviewAIExtraction" />
+    <bpmn:sequenceFlow id="Flow_AIReview_Register" sourceRef="Task_ReviewAIExtraction" targetRef="Task_RegisterOrUpdateInvoice_gRPC" />
     <bpmn:sequenceFlow id="Flow_ComplianceCheck_Result" sourceRef="Task_ManualComplianceCheck" targetRef="Gateway_ComplianceResult" />
     <bpmn:sequenceFlow id="Flow_ComplianceResult_Issue" name="Rückfrage nötig" sourceRef="Gateway_ComplianceResult" targetRef="Task_RequestMissingInformation">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= complianceOk = false</bpmn:conditionExpression>
@@ -353,6 +376,12 @@
       <bpmndi:BPMNShape id="Shape_Task_ExtractData_Manual" bpmnElement="Task_ExtractData_Manual">
         <dc:Bounds x="520" y="440" width="170" height="80" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_AIExtractInvoice" bpmnElement="Task_AIExtractInvoice">
+        <dc:Bounds x="520" y="440" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ReviewAIExtraction" bpmnElement="Task_ReviewAIExtraction">
+        <dc:Bounds x="520" y="540" width="170" height="80" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_ManualComplianceCheck" bpmnElement="Task_ManualComplianceCheck">
         <dc:Bounds x="1500" y="1040" width="190" height="80" />
         <bpmndi:BPMNLabel />
@@ -440,7 +469,7 @@
         <di:waypoint x="415" y="480" />
         <di:waypoint x="520" y="480" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="441" y="463" width="59" height="14" />
+          <dc:Bounds x="427" y="443" width="67" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_Flow_ManualDecision_Reject" bpmnElement="Flow_ManualDecision_Reject">
@@ -501,6 +530,16 @@
       <bpmndi:BPMNEdge id="Edge_Flow_ManualExtract_Register" bpmnElement="Flow_ManualExtract_Register">
         <di:waypoint x="690" y="480" />
         <di:waypoint x="740" y="480" />
+        <di:waypoint x="740" y="410" />
+        <di:waypoint x="790" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_AIExtract_Review" bpmnElement="Flow_AIExtract_Review">
+        <di:waypoint x="605" y="520" />
+        <di:waypoint x="605" y="540" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_AIReview_Register" bpmnElement="Flow_AIReview_Register">
+        <di:waypoint x="690" y="580" />
+        <di:waypoint x="740" y="580" />
         <di:waypoint x="740" y="410" />
         <di:waypoint x="790" y="410" />
       </bpmndi:BPMNEdge>

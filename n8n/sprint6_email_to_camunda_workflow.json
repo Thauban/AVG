@@ -1,0 +1,66 @@
+{
+  "name": "AVG Sprint 6 – Email triggert Camunda (Webhook Flow)",
+  "nodes": [
+    {
+      "parameters": {
+        "mailServer": {
+          "host": "imap.gmail.com",
+          "port": 993,
+          "tls": true
+        },
+        "loginName": "projektdvg@gmail.com",
+        "password": "xuzq jaip xevy vaod",
+        "format": "resolved",
+        "downloadAttachments": true,
+        "options": {}
+      },
+      "id": "email-trigger",
+      "name": "Email Eingang (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst binaryKeys = Object.keys(item.binary || {});\n\nconst pdfKey = binaryKeys.find(k => {\n  const b = item.binary[k];\n  return (b.mimeType || '').includes('pdf') || (b.fileName || '').toLowerCase().endsWith('.pdf');\n}) || binaryKeys[0];\n\nif (!pdfKey) {\n  throw new Error('Kein PDF-Anhang in der Mail gefunden.');\n}\n\nconst pdfBinary = item.binary[pdfKey];\n\n// PDF als base64 auslesen (n8n speichert binary als base64 intern)\nconst base64Content = pdfBinary.data;\nconst pdfName = pdfBinary.fileName || 'rechnung.pdf';\n\n// emailData Struktur die ai_extract_worker.py erwartet\nconst emailData = {\n  from: item.json.from || '',\n  subject: item.json.subject || '',\n  attachments: [\n    {\n      name: pdfName,\n      contentType: 'application/pdf',\n      content: base64Content\n    }\n  ]\n};\n\nreturn [{ json: emailData }];"
+      },
+      "id": "build-email-data",
+      "name": "emailData aufbauen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8088/start-with-email-data",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "camunda-start",
+      "name": "Camunda Prozess starten (mit emailData)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300]
+    }
+  ],
+  "connections": {
+    "Email Eingang (IMAP)": {
+      "main": [
+        [{ "node": "emailData aufbauen", "type": "main", "index": 0 }]
+      ]
+    },
+    "emailData aufbauen": {
+      "main": [
+        [{ "node": "Camunda Prozess starten (mit emailData)", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
