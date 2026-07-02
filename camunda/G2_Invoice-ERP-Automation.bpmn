@@ -86,15 +86,13 @@
       <bpmn:incoming>Flow_ErpSync_Payment</bpmn:incoming>
       <bpmn:outgoing>Flow_Payment_Archive</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:userTask id="Task_ErpSync" name="ERP-Buchung durchführen">
+    <bpmn:serviceTask id="Task_ErpSync" name="ERP-Buchung (UiPath)">
       <bpmn:extensionElements>
-        <zeebe:assignmentDefinition candidateGroups="finanzabteilung" />
-        <zeebe:formDefinition formId="erp-buchung-manuell" />
-        <zeebe:userTask />
+        <zeebe:taskDefinition type="erp-sync" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_Approve_ErpSync</bpmn:incoming>
       <bpmn:outgoing>Flow_ErpSync_Payment</bpmn:outgoing>
-    </bpmn:userTask>
+    </bpmn:serviceTask>
     <bpmn:userTask id="Task_ApproveInvoice" name="Rechnung final freigeben">
       <bpmn:extensionElements>
         <zeebe:assignmentDefinition candidateGroups="finanzabteilung" />

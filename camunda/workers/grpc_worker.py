@@ -109,6 +109,16 @@ def _save_metadata(request):
         return stub.SaveMetadata(request, timeout=GRPC_CALL_TIMEOUT_SECONDS)
 
 
+def _normalize_date(value: str) -> str:
+    if not value:
+        return value
+    # DD.MM.YYYY → YYYY-MM-DD
+    if len(value) == 10 and value[2] == "." and value[5] == ".":
+        parts = value.split(".")
+        return f"{parts[2]}-{parts[1]}-{parts[0]}"
+    return value
+
+
 def _to_float(value, default=0.0):
     # n8n/AI liefert Zahlen je nach Modell manchmal als Text.
     # Der Worker rechnet Positionen und Gesamtbeträge deshalb defensiv um.
@@ -311,11 +321,11 @@ def register(worker: ZeebeWorker):
             invoice_id=invoiceId,
             customer_name=customerName,
             total_amount=totalAmount,
-            issue_date=issueDate,
+            issue_date=_normalize_date(issueDate),
             iban=iban,
             currency=currency,
             kundennummer=kundennummer,
-            zahlungsziel=zahlungsziel,
+            zahlungsziel=_normalize_date(zahlungsziel),
         )
         # Übergabe der von n8n/Gemini extrahierten Rechnungspositionen
         # an den bestehenden gRPC-Server.

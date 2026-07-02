@@ -14,3 +14,8 @@ RABBITMQ_PORT  = int(os.getenv("RABBITMQ_PORT", 5672))
 RABBITMQ_USER  = os.getenv("RABBITMQ_USER")
 RABBITMQ_PASS  = os.getenv("RABBITMQ_PASS")
 RABBITMQ_QUEUE = os.getenv("RABBITMQ_QUEUE", "payment_queue")
+
+UIPATH_ACCOUNT_NAME   = os.getenv("UIPATH_ACCOUNT_NAME", "hochsydjqaey")
+UIPATH_TENANT_NAME    = os.getenv("UIPATH_TENANT_NAME", "DefaultTenant")
+UIPATH_CLIENT_ID      = os.getenv("UIPATH_CLIENT_ID")
+UIPATH_CLIENT_SECRET  = os.getenv("UIPATH_CLIENT_SECRET")
