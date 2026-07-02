@@ -137,6 +137,12 @@ RabbitMQ Dashboard: `http://127.0.0.1:15672` (User: `admin`, Pass: siehe `.env`)
 python server/main.py
 ```
 
+Der explizite Start wird empfohlen, damit die Server-Logs direkt sichtbar sind.
+Falls der Server beim gRPC-Prozessschritt nicht läuft, versucht der Camunda-Worker
+ihn auf `localhost:50051` automatisch zu starten und führt den Aufruf danach erneut aus.
+Schlägt auch der automatische Start fehl, erzeugt der Worker wie bisher einen
+technischen Camunda-Fehler mit der konkreten Ursache.
+
 ### Terminal 3 – Camunda Worker starten
 Verbindet sich mit Camunda SaaS und wartet auf eingehende Jobs:
 ```bash

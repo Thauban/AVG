@@ -1,5 +1,9 @@
 import sys
 import os
+# Wird verwendet, um server/main.py als eigenen lokalen Python-Prozess zu starten.
+import subprocess
+# Verhindert, dass mehrere Camunda-Jobs gleichzeitig mehrere gRPC-Server starten.
+import threading
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../client"))
 
@@ -10,6 +14,99 @@ from pyzeebe import ZeebeWorker
 import invoice_pb2
 import invoice_pb2_grpc
 from camunda.config import GRPC_SERVER
+
+
+# Ein einzelner Speicherversuch darf höchstens acht Sekunden blockieren.
+GRPC_CALL_TIMEOUT_SECONDS = 8
+# Nach dem automatischen Start warten wir höchstens 20 Sekunden auf den Server.
+GRPC_START_TIMEOUT_SECONDS = 20
+# Der Lock schützt den Prüf- und Startbereich vor parallelen Worker-Aufrufen.
+_grpc_start_lock = threading.Lock()
+
+
+def _grpc_channel_ready(timeout_seconds):
+    """Prüft innerhalb der Wartezeit, ob der konfigurierte gRPC-Endpunkt bereit ist."""
+    # Der Channel verwendet genau den Endpunkt aus GRPC_SERVER in der .env-Datei.
+    channel = grpc.insecure_channel(GRPC_SERVER)
+    try:
+        # channel_ready_future wird erst erfolgreich, wenn eine Verbindung möglich ist.
+        grpc.channel_ready_future(channel).result(timeout=timeout_seconds)
+        return True
+    except grpc.FutureTimeoutError:
+        # Ein Timeout bedeutet hier nur "noch nicht erreichbar" und nicht Programmabbruch.
+        return False
+    finally:
+        # Der reine Prüf-Channel wird unabhängig vom Ergebnis wieder geschlossen.
+        channel.close()
+
+
+def _is_local_grpc_server():
+    """Erlaubt den Autostart ausschließlich für den lokalen Projektserver auf Port 50051."""
+    # rpartition trennt beispielsweise "localhost:50051" in Host, Doppelpunkt und Port.
+    host, separator, port = GRPC_SERVER.rpartition(":")
+    # Entfernte Server dürfen niemals als lokaler Python-Prozess gestartet werden.
+    return separator and host.lower() in {"localhost", "127.0.0.1"} and port == "50051"
+
+
+def _start_local_grpc_server():
+    """Startet den lokalen gRPC-Server einmalig und wartet auf Bereitschaft."""
+    # Die Schutzprüfung verhindert einen Autostart bei einer externen gRPC-Konfiguration.
+    if not _is_local_grpc_server():
+        raise RuntimeError(
+            f"Automatischer Start ist nur fuer localhost:50051 moeglich; konfiguriert ist {GRPC_SERVER}."
+        )
+
+    # Innerhalb dieses Blocks darf immer nur ein Job gleichzeitig prüfen und starten.
+    with _grpc_start_lock:
+        # Vielleicht hat ein paralleler Job den Server inzwischen gestartet.
+        if _grpc_channel_ready(timeout_seconds=1):
+            return
+
+        # Der Projektroot wird relativ zu dieser Worker-Datei bestimmt.
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+        # Dies ist das bereits vorhandene Startskript des gRPC-Servers.
+        server_script = os.path.join(project_root, "server", "main.py")
+
+        logger.warning("[gRPC Worker] Server ist nicht erreichbar. Starte ihn automatisch ...")
+        # sys.executable verwendet dieselbe Python-Umgebung wie der Camunda-Worker.
+        # Projektroot und Umgebungsvariablen werden an den neuen Prozess weitergegeben.
+        process = subprocess.Popen(
+            [sys.executable, server_script],
+            cwd=project_root,
+            env=os.environ.copy(),
+        )
+
+        # Der gestartete Server benötigt zunächst seine PostgreSQL-Verbindung und den Port.
+        if _grpc_channel_ready(timeout_seconds=GRPC_START_TIMEOUT_SECONDS):
+            logger.success("[gRPC Worker] gRPC-Server wurde automatisch gestartet.")
+            return
+
+        # poll liefert None, wenn der gestartete Prozess nach dem Timeout noch läuft.
+        exit_code = process.poll()
+        if exit_code is None:
+            # Ein laufender, aber nicht erreichbarer Kindprozess wird sauber beendet.
+            process.terminate()
+            try:
+                # Nach terminate erhält der Prozess kurz Zeit zum kontrollierten Beenden.
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                # Nur wenn das nicht genügt, wird der von uns gestartete Prozess beendet.
+                process.kill()
+            raise RuntimeError(
+                f"gRPC-Server wurde gestartet, war aber nach {GRPC_START_TIMEOUT_SECONDS} Sekunden nicht bereit."
+            )
+        # Ein bereits beendeter Prozess liefert seinen Exit-Code zur Fehlerdiagnose.
+        raise RuntimeError(f"Automatischer Start des gRPC-Servers fehlgeschlagen (Exit-Code {exit_code}).")
+
+
+def _save_metadata(request):
+    """Sendet eine vorbereitete Rechnung mit einem festen Timeout an den gRPC-Server."""
+    # Für jeden Speicherversuch wird ein eigener, anschließend geschlossener Channel verwendet.
+    with grpc.insecure_channel(GRPC_SERVER) as channel:
+        # Der generierte Stub stellt die SaveMetadata-Methode aus invoice.proto bereit.
+        stub = invoice_pb2_grpc.InvoiceServiceStub(channel)
+        # Das Timeout verhindert, dass ein Camunda-Job unbegrenzt auf gRPC wartet.
+        return stub.SaveMetadata(request, timeout=GRPC_CALL_TIMEOUT_SECONDS)
 
 
 def _to_float(value, default=0.0):
@@ -209,25 +306,39 @@ def register(worker: ZeebeWorker):
             # In den Logs wird sichtbar, dass die Daten aus der n8n-Extraktion kamen.
             logger.info("[gRPC Worker] AI-Extraktion erkannt | Confidence: {}", extractionConfidence)
 
+        # Alle validierten Camunda-Prozessvariablen werden in die gRPC-Nachricht übertragen.
+        request = invoice_pb2.InvoiceRequest(
+            invoice_id=invoiceId,
+            customer_name=customerName,
+            total_amount=totalAmount,
+            issue_date=issueDate,
+            iban=iban,
+            currency=currency,
+            kundennummer=kundennummer,
+            zahlungsziel=zahlungsziel,
+        )
+        # Übergabe der von n8n/Gemini extrahierten Rechnungspositionen
+        # an den bestehenden gRPC-Server.
+        request.positionen.extend(grpc_positionen)
+
+        # Im Normalfall wird die Rechnung sofort an einen bereits laufenden Server gesendet.
         try:
-            with grpc.insecure_channel(GRPC_SERVER) as channel:
-                stub = invoice_pb2_grpc.InvoiceServiceStub(channel)
-                request = invoice_pb2.InvoiceRequest(
-                    invoice_id=invoiceId,
-                    customer_name=customerName,
-                    total_amount=totalAmount,
-                    issue_date=issueDate,
-                    iban=iban,
-                    currency=currency,
-                    kundennummer=kundennummer,
-                    zahlungsziel=zahlungsziel,
-                )
-                # Übergabe der von n8n/Gemini extrahierten Rechnungspositionen
-                # an den bestehenden gRPC-Server.
-                request.positionen.extend(grpc_positionen)
-                response = stub.SaveMetadata(request)
-        except grpc.RpcError as e:
-            raise Exception(f"gRPC Server nicht erreichbar: {e.details()}")
+            response = _save_metadata(request)
+        except grpc.RpcError as first_error:
+            # Nur UNAVAILABLE bedeutet, dass ein lokaler Serverstart sinnvoll ist.
+            # Fachliche und andere technische gRPC-Fehler werden direkt an Camunda gemeldet.
+            if first_error.code() != grpc.StatusCode.UNAVAILABLE:
+                raise Exception(f"gRPC Fehler: {first_error.details()}") from first_error
+
+            # Bei UNAVAILABLE startet der Worker den Server und wiederholt denselben Request.
+            try:
+                _start_local_grpc_server()
+                response = _save_metadata(request)
+            except (grpc.RpcError, RuntimeError) as retry_error:
+                # gRPC- und lokale Startfehler werden in eine verständliche Meldung vereinheitlicht.
+                details = retry_error.details() if isinstance(retry_error, grpc.RpcError) else str(retry_error)
+                # Die Exception lässt den Camunda-Job fehlschlagen, falls auch der Retry scheitert.
+                raise Exception(f"gRPC Server nicht erreichbar: {details}") from retry_error
 
         if not response.success:
             raise Exception(f"gRPC Fehler: {response.message}")
